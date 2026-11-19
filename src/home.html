@@ -7,7 +7,6 @@
 <script src="shared.js"></script>
 <script>
   if (/Windows/i.test(navigator.userAgent)) document.documentElement.classList.add("tl");
-  // Affichée dans l'interface (iframe) : l'interface fournit déjà l'Acrylic + la teinte
   if (window.parent !== window) document.documentElement.classList.add("emb");
 </script>
 <style>
@@ -24,7 +23,6 @@
     --tile: rgba(0,0,0,.05); --tile-hover: rgba(0,0,0,.11); --logo: invert(1);
     --tint: transparent;
   }
-  /* Barres de défilement discrètes, assorties au thème */
   * { scrollbar-width: thin; scrollbar-color: var(--sb, rgba(255,255,255,.22)) transparent; }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
@@ -38,9 +36,6 @@
     font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
     display: grid; place-items: center; overflow: hidden;
   }
-  /* Sous Windows : même teinte translucide que l'interface (index.html), au-dessus de l'Acrylic
-     de la fenêtre. Les webviews sont des surfaces séparées : sans cette teinte, l'accueil
-     paraît plus clair/opaque que le reste du navigateur. */
   html.tl { --bg-tl: rgba(0,0,0,.22); }
   html.tl[data-theme="blanc"] { --bg-tl: rgba(255,255,255,.34); }
   html.tl, html.tl body { background: transparent !important; }
@@ -141,7 +136,6 @@
     const url = TX.resolve($("#q").value);
     if (url) go(url);
   });
-  // Dans l'iframe de l'interface, on demande à l'interface de naviguer dans l'onglet
   function go(url) {
     if (window.parent !== window) window.parent.postMessage({ tweaxGo: url }, "*");
     else location.href = url;
@@ -151,7 +145,6 @@
     if (a) { e.preventDefault(); go(a.href); }
   });
 
-  // Les réglages changent dans l'interface : la page suit tout de suite
   window.addEventListener("storage", () => { applyTheme(); applyEngine(); tiles(); });
 
   applyTheme(); applyEngine(); tick(); tiles();

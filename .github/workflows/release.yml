@@ -1,5 +1,4 @@
 name: Release
-# Lance une release à chaque tag "v*" (ex : git tag v0.2.0 && git push --tags)
 on:
   push:
     tags: ["v*"]

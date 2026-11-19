@@ -1,12 +1,3 @@
-//! Coffre-fort de mots de passe de Tweax + import depuis un autre navigateur (export CSV).
-//!
-//! * Chiffrement : XChaCha20-Poly1305, clé dérivée du mot de passe maître avec Argon2id.
-//! * Le fichier sur disque ne contient jamais rien en clair (seuls le sel, les paramètres KDF et le nonce).
-//! * Les mots de passe ne repartent vers l'interface qu'à la demande (`reveal`), jamais dans les listes
-//!   ni dans l'aperçu d'import.
-//!
-//! Ce module ne dépend pas de Tauri : il se teste seul (`cargo test --release`).
-
 use std::{
     fs,
     io::Write,
@@ -26,12 +17,9 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 const FILE_VERSION: u32 = 1;
 const AAD: &[u8] = b"tweax-vault-v1";
 const MIN_MASTER_LEN: usize = 8;
-// Argon2id : 64 Mio, 3 passes, 1 voie (recommandation OWASP minimale)
 const KDF_M_KIB: u32 = 64 * 1024;
 const KDF_T: u32 = 3;
 const KDF_P: u32 = 1;
-
-// ---------- Types ----------
 
 #[derive(Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct Entry {
@@ -44,7 +32,6 @@ pub struct Entry {
     pub created: u64,
 }
 
-/// Ce que l'interface a le droit de voir dans une liste (jamais le mot de passe)
 #[derive(Serialize)]
 pub struct PublicEntry {
     pub id: String,
@@ -64,11 +51,8 @@ pub struct Status {
 #[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum RowStatus {
-    /// Pas encore dans le coffre
     New,
-    /// Même site + même identifiant + même mot de passe : ignoré
     Duplicate,
-    /// Même site + même identifiant mais mot de passe différent
     Conflict,
 }
 
@@ -82,13 +66,11 @@ pub struct PreviewRow {
 
 #[derive(Serialize)]
 pub struct Preview {
-    /// Format détecté (Chrome/Edge/Brave/Opera, Firefox, Safari, Bitwarden…)
     pub format: String,
     pub rows: Vec<PreviewRow>,
     pub new: usize,
     pub duplicates: usize,
     pub conflicts: usize,
-    /// Lignes inutilisables (sans mot de passe, sans site…)
     pub invalid: usize,
 }
 
@@ -99,11 +81,9 @@ pub struct ImportResult {
     pub skipped: usize,
 }
 
-/// Problème détecté par l'audit
 #[derive(Serialize)]
 pub struct AuditItem {
     pub id: String,
-    /// "weak" (faible) ou "reused" (même mot de passe sur plusieurs sites)
     pub reason: &'static str,
 }
 
@@ -151,8 +131,6 @@ pub struct Vault {
     pending: Option<Pending>,
 }
 
-// ---------- Utilitaires ----------
-
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
@@ -186,7 +164,6 @@ fn derive_key(master: &str, salt: &[u8], (m, t, p): (u32, u32, u32)) -> Result<Z
     Ok(key)
 }
 
-/// Clé de comparaison d'un site : nom d'hôte en minuscules, sans "www."
 pub fn site_key(url: &str) -> String {
     let u = url.trim();
     let with_scheme = if u.contains("://") { u.to_string() } else { format!("https://{u}") };
@@ -196,7 +173,6 @@ pub fn site_key(url: &str) -> String {
     }
 }
 
-/// Extraction d'hôte minimaliste (évite une dépendance de plus) : schéma://[user@]hôte[:port]/…
 fn host_of(u: &str) -> Option<String> {
     let rest = u.split_once("://")?.1;
     let auth = rest.split(['/', '?', '#']).next()?;
@@ -207,8 +183,6 @@ fn host_of(u: &str) -> Option<String> {
     }
     Some(host.strip_prefix("www.").map(str::to_string).unwrap_or(host))
 }
-
-// ---------- Import CSV ----------
 
 struct ParsedRow {
     name: String,
@@ -293,9 +267,9 @@ fn parse_csv(text: &str) -> Result<Parsed, String> {
             continue;
         };
         if rec.iter().all(|f| f.trim().is_empty()) {
-            continue; // ligne vide, ni comptée ni importée
+            continue;
         }
-        let password = rec.get(c_pass).unwrap_or("").to_string(); // surtout pas de trim sur un mot de passe
+        let password = rec.get(c_pass).unwrap_or("").to_string();
         let mut url = get(&rec, c_url);
         let mut name = get(&rec, c_name);
         let username = get(&rec, c_user);
@@ -319,8 +293,6 @@ fn parse_csv(text: &str) -> Result<Parsed, String> {
     }
     Ok(Parsed { format, rows, invalid })
 }
-
-// ---------- Coffre ----------
 
 impl Vault {
     pub fn new(path: PathBuf) -> Self {
@@ -387,7 +359,7 @@ impl Vault {
     }
 
     pub fn lock(&mut self) {
-        self.state = None; // Zeroizing + ZeroizeOnDrop effacent clé et entrées
+        self.state = None;
         self.pending = None;
     }
 
@@ -422,7 +394,6 @@ impl Vault {
         save(&path, st)
     }
 
-    /// Ajoute (id = None) ou modifie une entrée. `note = None` conserve la note existante.
     pub fn save_entry(
         &mut self,
         id: Option<String>,
@@ -474,7 +445,6 @@ impl Vault {
         Ok(out)
     }
 
-    /// Change le mot de passe maître : nouveau sel, nouvelle clé, coffre ré-chiffré.
     pub fn change_master(&mut self, old: &str, new: &str) -> Result<(), String> {
         if new.chars().count() < MIN_MASTER_LEN {
             return Err(format!("nouveau mot de passe trop court ({MIN_MASTER_LEN} caractères minimum)"));
@@ -494,7 +464,6 @@ impl Vault {
         save(&path, st)
     }
 
-    /// Identifiants correspondant exactement à ce nom d'hôte (pas de sous-domaines : évite les pièges)
     pub fn matches_host(&mut self, host: &str) -> Result<Vec<PublicEntry>, String> {
         let h = site_key(host);
         Ok(self
@@ -506,7 +475,6 @@ impl Vault {
             .collect())
     }
 
-    /// (url, identifiant, mot de passe) pour le remplissage automatique
     pub fn credentials(&mut self, id: &str) -> Result<(String, String, String), String> {
         self.unlocked()?
             .entries
@@ -523,7 +491,6 @@ impl Vault {
             if is_weak(&e.password) {
                 out.push(AuditItem { id: e.id.clone(), reason: "weak" });
             }
-            // réutilisé = même mot de passe sur un AUTRE site
             let k = site_key(&e.url);
             if entries.iter().any(|o| o.id != e.id && o.password == e.password && site_key(&o.url) != k) {
                 out.push(AuditItem { id: e.id.clone(), reason: "reused" });
@@ -532,12 +499,10 @@ impl Vault {
         Ok(out)
     }
 
-    /// Analyse un export CSV et le garde en attente (les mots de passe restent côté Rust).
     pub fn import_preview(&mut self, csv_text: &str) -> Result<Preview, String> {
-        self.unlocked()?; // il faut que le coffre soit déverrouillé
+        self.unlocked()?;
         let parsed = parse_csv(csv_text)?;
 
-        // Table de travail : existant + lignes déjà vues dans ce fichier
         let mut seen: Vec<(String, String, String)> = self
             .unlocked()?
             .entries
@@ -614,7 +579,6 @@ impl Vault {
     }
 }
 
-/// Chiffre et écrit le coffre de façon atomique (fichier temporaire puis renommage).
 fn save(path: &Path, st: &Unlocked) -> Result<(), String> {
     let plain = Zeroizing::new(serde_json::to_vec(&st.entries).map_err(|e| e.to_string())?);
     let mut nonce = [0u8; 24];
@@ -641,8 +605,6 @@ fn save(path: &Path, st: &Unlocked) -> Result<(), String> {
     }
     fs::rename(&tmp, path).map_err(|e| e.to_string())
 }
-
-// ---------- Tests ----------
 
 #[cfg(test)]
 mod tests {
@@ -724,13 +686,11 @@ mod tests {
         let r = v.import_commit(false).unwrap();
         assert_eq!((r.added, r.updated, r.skipped), (2, 0, 0));
 
-        // rien en clair sur le disque
         let raw = fs::read_to_string(&path).unwrap();
         for leak in ["alice", "github", "pa$$", "example.com"] {
             assert!(!raw.contains(leak), "fuite: {leak}");
         }
 
-        // réimport : doublons ; avec mot de passe changé : conflit
         let again = "name,url,username,password\nGitHub,https://github.com/login,alice,pa$$\nGitHub2,https://github.com/,ALICE,nouveau\nNeuf,https://neuf.fr,z,zz\n";
         let pv = v.import_preview(again).unwrap();
         assert_eq!((pv.new, pv.duplicates, pv.conflicts), (1, 1, 1));
@@ -742,21 +702,18 @@ mod tests {
         let gh = list.iter().find(|e| e.url.contains("github")).unwrap();
         assert_eq!(v.reveal(&gh.id).unwrap(), "nouveau");
 
-        // verrouillage / déverrouillage
         v.lock();
         assert!(v.list().is_err());
         assert!(v.unlock("mauvais-mot-de-passe").is_err());
         v.unlock("un-bon-mot-de-passe").unwrap();
         assert_eq!(v.list().unwrap().len(), 3);
 
-        // suppression persistée
         let id = v.list().unwrap()[0].id.clone();
         v.delete(&id).unwrap();
         v.lock();
         v.unlock("un-bon-mot-de-passe").unwrap();
         assert_eq!(v.list().unwrap().len(), 2);
 
-        // import refusé coffre verrouillé ; conflit ignoré si on ne remplace pas
         v.lock();
         assert!(v.import_preview(CHROME).is_err());
         let _ = fs::remove_file(path);
@@ -775,12 +732,10 @@ mod tests {
         assert_eq!(v.list().unwrap().iter().find(|e| e.id == a).unwrap().name, "shop.fr");
         assert_eq!(v.list().unwrap().iter().find(|e| e.id == a).unwrap().username, "me");
 
-        // modification : la note est conservée si None
         v.save_entry(Some(a.clone()), "Shop", "https://shop.fr", "me", "nouveau-Mdp-9!xyz", None).unwrap();
         assert_eq!(v.reveal(&a).unwrap(), "nouveau-Mdp-9!xyz");
         assert_eq!(v.unlocked().unwrap().entries.iter().find(|e| e.id == a).unwrap().note, "n");
 
-        // audit : b = plus réutilisé (a a changé), c = faible
         let au = v.audit().unwrap();
         assert!(au.iter().any(|i| i.id == c && i.reason == "weak"));
         assert!(!au.iter().any(|i| i.id == b));
@@ -788,13 +743,11 @@ mod tests {
         let au = v.audit().unwrap();
         assert!(au.iter().any(|i| i.id == a && i.reason == "reused") && au.iter().any(|i| i.id == b && i.reason == "reused"));
 
-        // correspondance par hôte exact
         assert_eq!(v.matches_host("shop.fr").unwrap().len(), 1);
         assert_eq!(v.matches_host("www.SHOP.fr").unwrap().len(), 1);
         assert_eq!(v.matches_host("evil.shop.fr").unwrap().len(), 0);
         assert_eq!(v.matches_host("shop.fr.evil.com").unwrap().len(), 0);
 
-        // changement du mot de passe maître
         assert!(v.change_master("mauvais", "nouveau-master-123").is_err());
         assert!(v.change_master("un-bon-mot-de-passe", "court").is_err());
         v.change_master("un-bon-mot-de-passe", "nouveau-master-123").unwrap();

@@ -11,14 +11,9 @@ use tauri::{State,
     WindowEvent,
 };
 
-// ---------- Géométrie de l'interface (pixels logiques) ----------
-/// Barre latérale d'icônes (style Opera), à gauche sur toute la hauteur
 const RAIL_W: f64 = 58.0;
-/// Hauteur de la zone du haut : rangée d'onglets + barre d'outils
 const TOP_H: f64 = 94.0;
-/// Largeur du panneau latéral quand il est ouvert
 const PANEL_W: f64 = 380.0;
-/// Durée de l'animation de rétractation (identique à la transition CSS de l'interface)
 const ZEN_MS: f64 = 240.0;
 
 const HOME: &str = "https://www.google.com/";
@@ -26,12 +21,9 @@ const HOME: &str = "https://www.google.com/";
 static NEXT_ID: AtomicU32 = AtomicU32::new(1);
 static PANEL_OPEN: AtomicBool = AtomicBool::new(false);
 
-// Mode "page en grand" : la barre latérale et la zone du haut se rétractent.
-// RAIL_CUR / TOP_CUR = tailles actuelles (animées) en pixels logiques, stockées en bits de f64.
 static ZEN: AtomicBool = AtomicBool::new(false);
-// Le masquage automatique peut être suspendu lorsque l’utilisateur quitte manuellement le mode agrandi.
 static AUTO_HIDE_ENABLED: AtomicBool = AtomicBool::new(false);
-static ZEN_GEN: AtomicU32 = AtomicU32::new(0); // numéro de l'animation en cours (annule les anciennes)
+static ZEN_GEN: AtomicU32 = AtomicU32::new(0);
 static RAIL_CUR: AtomicU64 = AtomicU64::new(RAIL_W.to_bits());
 static TOP_CUR: AtomicU64 = AtomicU64::new(TOP_H.to_bits());
 
@@ -49,7 +41,6 @@ struct TabUpdate {
     loading: bool,
 }
 
-/// Transforme ce que tape l'utilisateur en URL valide (ou en recherche)
 fn normalize(input: &str) -> Url {
     let s = input.trim();
     if s.is_empty() {
@@ -65,11 +56,9 @@ fn normalize(input: &str) -> Url {
             return u;
         }
     }
-    // Repli : normalement l'interface a déjà transformé la saisie avec le moteur choisi
     Url::parse_with_params("https://www.google.com/search", &[("q", s)]).unwrap()
 }
 
-/// Vrai si l'adresse est la page d'accueil intégrée de Tweax (et pas un site qui aurait le même chemin)
 #[allow(dead_code)]
 fn is_home_url(u: &Url) -> bool {
     let local = u.scheme() == "tauri" || matches!(u.host_str(), Some("tauri.localhost") | Some("localhost"));
@@ -81,14 +70,12 @@ fn tab(app: &AppHandle, id: u32) -> Result<Webview, String> {
         .ok_or_else(|| format!("onglet {id} introuvable"))
 }
 
-/// (x, y, largeur, hauteur) de la page web de l'onglet actif : collée à l'interface, sans marge ni cadre
 fn content_rect(win_w: f64, win_h: f64) -> (f64, f64, f64, f64) {
     let left = rail_cur() + if PANEL_OPEN.load(Ordering::SeqCst) { PANEL_W } else { 0.0 };
     let top = top_cur();
     (left, top, (win_w - left).max(1.0), (win_h - top).max(1.0))
 }
 
-/// (x, y, largeur, hauteur) du panneau latéral
 fn panel_rect(win_h: f64) -> (f64, f64, f64, f64) {
     let top = top_cur();
     (rail_cur(), top, PANEL_W, (win_h - top).max(1.0))
@@ -106,7 +93,6 @@ fn window_size(app: &AppHandle) -> Option<(f64, f64)> {
     Some((s.width, s.height))
 }
 
-/// Replace l'interface, les panneaux et les onglets selon la taille de la fenêtre
 fn layout(app: &AppHandle) {
     let Some((w, h)) = window_size(app) else { return };
     for (label, wv) in app.webviews() {
@@ -136,8 +122,6 @@ fn hide_all_panels(app: &AppHandle) {
     }
 }
 
-/// Affiche une petite bulle directement dans chaque page (au-dessus du site),
-/// pour indiquer les bords à survoler lorsque les barres sont repliées.
 fn set_edge_hint(wv: &Webview, show: bool) {
     let js = if show {
         r#"(() => {
@@ -173,9 +157,6 @@ fn set_edge_hint(wv: &Webview, show: bool) {
     let _ = wv.eval(js);
 }
 
-/// Surveille les bords de la fenêtre : quand le mode automatique est actif,
-/// le survol du haut/gauche affiche temporairement les barres, puis elles se replient
-/// quand le curseur quitte les zones de chrome. Cela ne désactive jamais le mode.
 fn watch_zen_edges(app: AppHandle) {
     std::thread::spawn(move || {
         let mut away_since: Option<Instant> = None;
@@ -211,14 +192,11 @@ fn watch_zen_edges(app: AppHandle) {
     });
 }
 
-// ---------- Commandes appelées depuis l'interface ----------
-
 #[tauri::command]
 async fn new_tab(app: AppHandle, url: Option<String>) -> Result<u32, String> {
     let window = app.get_window("main").ok_or("fenêtre introuvable")?;
     let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
     let url = url.unwrap_or_default();
-    // Pas d'adresse -> page d'accueil intégrée de Tweax (src/home.html)
     let is_home = url.trim().is_empty();
     let target = if is_home {
         WebviewUrl::App("home.html".into())
@@ -234,15 +212,11 @@ async fn new_tab(app: AppHandle, url: Option<String>) -> Result<u32, String> {
     let handle = app.clone();
     let popup_handle = app.clone();
     let builder = WebviewBuilder::new(format!("tab-{id}"), target)
-        // target="_blank" / window.open : on refuse la fenêtre native et l'interface ouvre un onglet
         .on_new_window(move |url, _features| {
             let _ = popup_handle.emit("new-window", url.to_string());
             tauri::webview::NewWindowResponse::Deny
         })
-        // Les pages sont transparentes sous Windows pour que l'accueil laisse voir l'acrylique ;
-        // les vrais sites, eux, reprennent un fond blanc opaque comme dans n'importe quel navigateur.
         .transparent(cfg!(target_os = "windows"))
-        // Fond correct dès la création (évite un flash blanc avant le premier chargement)
         .background_color(if is_home && cfg!(target_os = "windows") {
             tauri::webview::Color(0, 0, 0, 0)
         } else {
@@ -252,12 +226,9 @@ async fn new_tab(app: AppHandle, url: Option<String>) -> Result<u32, String> {
             #[cfg(target_os = "windows")]
             {
                 use tauri::webview::Color;
-                // L'accueil doit laisser passer l'Acrylic de la fenêtre native.
-                // Un fond opaque ici recouvre le verre et produit le grand rectangle blanc/gris.
                 if is_home_url(payload.url()) {
                     let _ = wv.set_background_color(Some(Color(0, 0, 0, 0)));
                 } else {
-                    // Les sites web gardent leur rendu normal et leur fond propre.
                     let _ = wv.set_background_color(Some(Color(255, 255, 255, 255)));
                 }
             }
@@ -277,7 +248,6 @@ async fn new_tab(app: AppHandle, url: Option<String>) -> Result<u32, String> {
     let wv = window
         .add_child(builder, LogicalPosition::new(x, y), LogicalSize::new(cw, ch))
         .map_err(|e| e.to_string())?;
-    // L'accueil est dessiné par l'interface (iframe transparente) : la webview native reste cachée
     if is_home {
         let _ = wv.hide();
     }
@@ -294,7 +264,6 @@ async fn switch_tab(app: AppHandle, id: u32) -> Result<(), String> {
     Ok(())
 }
 
-/// Cache toutes les pages natives sans toucher aux panneaux : l'interface affiche alors l'accueil elle-même
 #[tauri::command]
 async fn hide_all_tabs_cmd(app: AppHandle) -> Result<(), String> {
     hide_all_tabs(&app);
@@ -331,7 +300,6 @@ async fn reload(app: AppHandle, id: u32) -> Result<(), String> {
     tab(&app, id)?.eval("location.reload()").map_err(|e| e.to_string())
 }
 
-/// Ramène l'onglet sur la page d'accueil Tweax
 #[tauri::command]
 async fn go_home(app: AppHandle, id: u32) -> Result<(), String> {
     let base = app
@@ -342,8 +310,6 @@ async fn go_home(app: AppHandle, id: u32) -> Result<(), String> {
     let home = base.join("home.html").map_err(|e| e.to_string())?;
     tab(&app, id)?.navigate(home).map_err(|e| e.to_string())
 }
-
-// ---------- Contrôles de fenêtre (la barre de titre native est retirée) ----------
 
 fn main_window(app: &AppHandle) -> Result<tauri::Window, String> {
     app.get_window("main").ok_or_else(|| "fenêtre introuvable".to_string())
@@ -375,7 +341,6 @@ async fn win_drag(app: AppHandle) -> Result<(), String> {
     main_window(&app)?.start_dragging().map_err(|e| e.to_string())
 }
 
-/// Translucidité de la fenêtre (acrylique, Windows) : teinte sombre ou claire selon le thème
 #[tauri::command]
 async fn set_tint(app: AppHandle, dark: bool) -> Result<(), String> {
     #[cfg(target_os = "windows")]
@@ -393,8 +358,6 @@ async fn set_tint(app: AppHandle, dark: bool) -> Result<(), String> {
     Ok(())
 }
 
-/// Masque toutes les pages natives (elles passent au-dessus de l'interface) :
-/// nécessaire pour afficher la fenêtre de réglages par-dessus.
 #[tauri::command]
 async fn hide_tabs(app: AppHandle) -> Result<(), String> {
     hide_all_tabs(&app);
@@ -405,8 +368,6 @@ async fn hide_tabs(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Passe la page en grand (true) ou ramène les barres (false), avec une animation :
-/// les webviews natives ne peuvent pas être animées en CSS, on interpole donc leur position ici.
 #[tauri::command]
 async fn set_zen(app: AppHandle, on: bool, auto_hide: Option<bool>) -> Result<(), String> {
     ZEN.store(on, Ordering::SeqCst);
@@ -423,10 +384,10 @@ async fn set_zen(app: AppHandle, on: bool, auto_hide: Option<bool>) -> Result<()
         let start = Instant::now();
         loop {
             if ZEN_GEN.load(Ordering::SeqCst) != gen {
-                return; // une animation plus récente a pris le relais
+                return;
             }
             let t = (start.elapsed().as_secs_f64() * 1000.0 / ZEN_MS).min(1.0);
-            let e = 1.0 - (1.0 - t).powi(3); // ease-out cubique (≈ la courbe CSS)
+            let e = 1.0 - (1.0 - t).powi(3);
             RAIL_CUR.store((from_r + (to_r - from_r) * e).to_bits(), Ordering::SeqCst);
             TOP_CUR.store((from_t + (to_t - from_t) * e).to_bits(), Ordering::SeqCst);
             layout(&app);
@@ -439,7 +400,6 @@ async fn set_zen(app: AppHandle, on: bool, auto_hide: Option<bool>) -> Result<()
     Ok(())
 }
 
-/// Ouvre / ferme la zone du panneau latéral (la page se décale en conséquence)
 #[tauri::command]
 async fn set_panel(app: AppHandle, open: bool) -> Result<(), String> {
     PANEL_OPEN.store(open, Ordering::SeqCst);
@@ -450,8 +410,6 @@ async fn set_panel(app: AppHandle, open: bool) -> Result<(), String> {
     Ok(())
 }
 
-/// Affiche un site web dans le panneau latéral (WhatsApp, Discord…).
-/// Chaque site garde sa session : on le crée une fois, puis on le montre/cache.
 #[tauri::command]
 async fn show_web_panel(app: AppHandle, key: String, url: String) -> Result<(), String> {
     let window = app.get_window("main").ok_or("fenêtre introuvable")?;
@@ -477,14 +435,12 @@ async fn show_web_panel(app: AppHandle, key: String, url: String) -> Result<(), 
     Ok(())
 }
 
-/// Cache les sites du panneau (pour afficher un panneau interne : favoris, historique…)
 #[tauri::command]
 async fn hide_web_panels(app: AppHandle) -> Result<(), String> {
     hide_all_panels(&app);
     Ok(())
 }
 
-/// Supprime la session d'un site du panneau (quand on retire l'icône)
 #[tauri::command]
 async fn close_web_panel(app: AppHandle, key: String) -> Result<(), String> {
     if let Some(wv) = app.get_webview(&format!("panel-{key}")) {
@@ -492,9 +448,6 @@ async fn close_web_panel(app: AppHandle, key: String) -> Result<(), String> {
     }
     Ok(())
 }
-
-// ---------- Coffre de mots de passe + import depuis un autre navigateur ----------
-// Les commandes sont `async` : Argon2 prend ~0,3 s et ne doit pas bloquer le fil principal.
 
 struct VaultState(Mutex<vault::Vault>);
 
@@ -544,13 +497,11 @@ async fn vault_delete(state: State<'_, VaultState>, id: String) -> Result<(), St
     with_vault(&state, |v| v.delete(&id))
 }
 
-/// Étape 1 de l'import : analyse l'export CSV d'un autre navigateur (rien n'est encore enregistré)
 #[tauri::command]
 async fn vault_import_preview(state: State<'_, VaultState>, csv: String) -> Result<vault::Preview, String> {
     with_vault(&state, |v| v.import_preview(&csv))
 }
 
-/// Étape 2 : enregistre l'import analysé
 #[tauri::command]
 async fn vault_import_commit(state: State<'_, VaultState>, replace_conflicts: bool) -> Result<vault::ImportResult, String> {
     with_vault(&state, |v| v.import_commit(replace_conflicts))
@@ -579,13 +530,11 @@ async fn vault_audit(state: State<'_, VaultState>) -> Result<Vec<vault::AuditIte
     with_vault(&state, |v| v.audit())
 }
 
-/// Identifiants du coffre qui correspondent (exactement) au site affiché
 #[tauri::command]
 async fn vault_matches(state: State<'_, VaultState>, host: String) -> Result<Vec<vault::PublicEntry>, String> {
     with_vault(&state, |v| v.matches_host(&host))
 }
 
-/// Script exécuté dans la page : trouve le champ mot de passe visible + le champ identifiant qui le précède
 const AUTOFILL_JS: &str = r#"(function (u, p) {
   var vis = function (e) { var r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden'; };
   var set = function (el, v) {
@@ -605,8 +554,6 @@ const AUTOFILL_JS: &str = r#"(function (u, p) {
   if (pw) set(pw, p);
 })"#;
 
-/// Remplit la page de l'onglet avec un identifiant du coffre. Déclenché par l'utilisateur (clic sur la clé).
-/// Garde-fous : la page doit être en HTTPS (ou localhost) ET son hôte doit être exactement celui de l'entrée.
 #[tauri::command]
 async fn vault_autofill(app: AppHandle, state: State<'_, VaultState>, tab_id: u32, entry_id: String) -> Result<(), String> {
     let wv = tab(&app, tab_id)?;
@@ -641,8 +588,6 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
-            // Mises à jour : le plugin n'est activé que si "plugins.updater" est présent dans la config
-            // (fusionnée au build de release via tauri.release.conf.json). En dev, il est ignoré.
             #[cfg(desktop)]
             {
                 if app.config().plugins.0.contains_key("updater") {
@@ -650,7 +595,6 @@ pub fn run() {
                 }
             }
 
-            // Coffre : fichier chiffré dans le dossier de données de l'application
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
             app.manage(VaultState(Mutex::new(vault::Vault::new(dir.join("vault.bin")))));
@@ -659,7 +603,7 @@ pub fn run() {
                 .title("Tweax")
                 .inner_size(1280.0, 820.0)
                 .min_inner_size(760.0, 420.0)
-                .decorations(false) // plus de barre de titre native
+                .decorations(false)
                 .shadow(true)
                 .transparent(cfg!(target_os = "windows"));
             if let Some(icon) = app.default_window_icon() {
@@ -671,8 +615,6 @@ pub fn run() {
                 .inner_size()?
                 .to_logical::<f64>(window.scale_factor()?);
 
-            // La webview "ui" couvre toute la fenêtre (fond, barre latérale, onglets,
-            // barre d'adresse). Les pages web sont posées PAR-DESSUS, dans la "carte".
             window.add_child(
                 WebviewBuilder::new("ui", WebviewUrl::App("index.html".into()))
                     .transparent(cfg!(target_os = "windows")),

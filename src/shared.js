@@ -1,11 +1,9 @@
-/* Tweax — réglages partagés entre l'interface (index.html) et la page d'accueil (home.html) */
 (() => {
   const store = {
     get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
   };
 
-  // %s est remplacé par la recherche de l'utilisateur
   const ENGINES = {
     google:     { name: "Google",     url: "https://www.google.com/search?q=%s" },
     duckduckgo: { name: "DuckDuckGo", url: "https://duckduckgo.com/?q=%s" },
@@ -33,7 +31,6 @@
     return (ENGINES[id] || ENGINES.google).name;
   }
 
-  // Transforme ce que tape l'utilisateur en adresse (ou en recherche avec SON moteur)
   function resolve(input) {
     const s = (input || "").trim();
     if (!s) return "";
