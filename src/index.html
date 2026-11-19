@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tweax</title>
+<script>if (/Windows/i.test(navigator.userAgent)) document.documentElement.classList.add("tl");</script>
+<style>
+  /* ====== Thèmes : noir et blanc uniquement ====== */
+  :root, [data-theme="noir"] {
+    --bg: #0a0a0a; --bg-tl: rgba(0,0,0,.22);
+    --text: #f6f6f6; --muted: rgba(255,255,255,.55); --glass: rgba(255,255,255,.06);
+    --glass2: rgba(255,255,255,.14); --hover: rgba(255,255,255,.10); --line: rgba(255,255,255,.15);
+    --accent: #ffffff; --onaccent: #000000; --card: rgba(14,14,14,.88);
+    --modal: rgba(24,24,24,.72); --scrim: rgba(0,0,0,.38);
+  }
+  [data-theme="blanc"] {
+    --sb: rgba(0,0,0,.25); --sb-hover: rgba(0,0,0,.45);
+    --bg: #ffffff; --bg-tl: rgba(255,255,255,.8);
+    --text: #111111; --muted: rgba(0,0,0,.62); --glass: rgba(255,255,255,.55);
+    --glass2: rgba(255,255,255,.58); --hover: rgba(255,255,255,.62); --line: rgba(255,255,255,.72);
+    --accent: #000000; --onaccent: #ffffff; --card: rgba(255,255,255,.76);
+    --modal: rgba(255,255,255,.88); --scrim: rgba(255,255,255,.16);
+  }
+  /* Translucidité réelle (fenêtre acrylique sous Windows) */
+  html.tl { background: transparent !important; }
+  html.tl body { background: var(--bg-tl) !important; }
+  /* Accueil dessiné dans l'interface (transparent comme le reste) au lieu d'une webview native opaque */
+  #homeframe { display: none; position: fixed; left: var(--rail); top: var(--top); width: calc(100vw - var(--rail)); height: calc(100vh - var(--top)); border: 0; background: transparent; z-index: 1; color-scheme: normal; }
+  body.home-ui #homeframe { display: block; }
+  body.panel-open #homeframe { left: calc(var(--rail) + var(--panel)); width: calc(100vw - var(--rail) - var(--panel)); }
+  body.zen #homeframe { left: 0; top: 0; width: 100vw; height: 100vh; }
+  [data-theme="blanc"] img[src="logo.png"] { filter: invert(1); }
+  [data-theme="blanc"] #modal,
+  [data-theme="blanc"] #afbox {
+    background: rgba(255,255,255,.88);
+    border-color: rgba(255,255,255,.88);
+    box-shadow: 0 24px 70px rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.95);
+  }
+  [data-theme="blanc"] #mnav { background: rgba(255,255,255,.56); border-right-color: rgba(0,0,0,.07); }
+  [data-theme="blanc"] .glass { background: rgba(255,255,255,.34); border-color: rgba(255,255,255,.64); }
+  [data-theme="blanc"] .nv.on { background: rgba(0,0,0,.075); }
+
+  /* Barres de défilement discrètes, assorties au thème */
+  * { scrollbar-width: thin; scrollbar-color: var(--sb, rgba(255,255,255,.22)) transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--sb, rgba(255,255,255,.22)); border-radius: 10px; border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--sb-hover, rgba(255,255,255,.4)); background-clip: content-box; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; overflow: hidden; user-select: none; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 13px system-ui, -apple-system, "Segoe UI", sans-serif;
+    --rail: 58px; --top: 94px; --pad: 8px; --panel: 380px;
+  }
+  button { font: inherit; color: inherit; }
+  svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .glass { background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(22px) saturate(1.3); -webkit-backdrop-filter: blur(22px) saturate(1.3); }
+  .ibtn { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: none; color: var(--text); cursor: pointer; transition: background .15s; }
+  .ibtn:hover { background: var(--hover); }
+  #zen { margin-left: 4px; }
+  .ibtn.on { color: var(--accent); }
+
+  /* ====== Barre latérale (style Opera) ====== */
+  #rail {
+    position: fixed; left: 0; top: 0; bottom: 0; width: var(--rail); padding: 10px 0;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    background: var(--glass); border-right: 1px solid var(--line);
+    backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
+  }
+  #rail .sep { width: 26px; height: 1px; background: var(--line); margin: 4px 0; }
+  #rail .grow { flex: 1; }
+  .ri { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 12px; background: none; cursor: pointer; color: var(--text); transition: background .15s, transform .15s; }
+  .ri:hover { background: var(--hover); }
+  .ri.active { background: var(--glass2); }
+  .ri.has-upd::after { content: ""; position: absolute; top: 7px; right: 7px; width: 9px; height: 9px; border-radius: 50%; background: #3b82f6; box-shadow: 0 0 0 2px var(--bg-tl, transparent); }
+  .upd-card { padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--glass); display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+  .upd-bar { height: 6px; border-radius: 6px; background: var(--glass2); overflow: hidden; } .upd-bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+  .ri.active::before { content: ""; position: absolute; left: -9px; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+  .ri img { width: 22px; height: 22px; border-radius: 6px; }
+  .ri .ph { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; background: var(--accent); color: var(--onaccent); font-weight: 700; font-size: 12px; }
+
+  /* ====== Zone du haut : onglets + barre d'outils ====== */
+  #top { position: fixed; left: var(--rail); right: 0; top: 0; height: var(--top); padding: 0 12px 0 var(--pad); border-bottom: 1px solid var(--line); }
+  /* ====== Page en grand : la barre latérale et le haut se rétractent (Rust anime la page en parallèle) ====== */
+  :root { --ease: cubic-bezier(.22, .61, .36, 1); }
+  #rail { transition: transform .24s var(--ease); }
+  #top { transition: transform .24s var(--ease); }
+  #wc { transition: transform .24s var(--ease); }
+  body.zen #rail { transform: translateX(-100%); }
+  body.zen #top, body.zen #wc { transform: translateY(-100%); }
+  #tabs { display: flex; align-items: center; gap: 4px; height: 46px; padding-top: 6px; }
+  .tab {
+    display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 6px 0 10px;
+    flex: 0 1 200px; min-width: 56px; max-width: 200px; border-radius: 10px;
+    border: 1px solid transparent; color: var(--muted); cursor: default; transition: background .15s;
+  }
+  .tab:hover { background: var(--hover); }
+  .tab.active { background: var(--glass2); color: var(--text); border-color: var(--line); box-shadow: 0 2px 10px rgba(0,0,0,.18); }
+  .tab img { width: 15px; height: 15px; border-radius: 4px; flex: none; }
+  .tab .title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tab .x { display: grid; place-items: center; width: 20px; height: 20px; border: 0; border-radius: 6px; background: none; color: inherit; cursor: pointer; opacity: 0; }
+  .tab:hover .x, .tab.active .x { opacity: .8; }
+  .tab .x:hover { background: var(--hover); opacity: 1; }
+  .tab .x svg { width: 12px; height: 12px; }
+  .spin { width: 14px; height: 14px; flex: none; border: 2px solid var(--muted); border-top-color: transparent; border-radius: 50%; animation: r .7s linear infinite; }
+  @keyframes r { to { transform: rotate(360deg); } }
+
+  #bar { display: flex; align-items: center; gap: 4px; height: 48px; }
+  #urlwrap {
+    flex: 1; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 8px 0 12px; margin: 0 6px;
+    border-radius: 12px; background: var(--glass); border: 1px solid var(--line);
+    backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); transition: border-color .15s, background .15s;
+  }
+  #urlwrap:focus-within { border-color: var(--accent); background: var(--card); }
+  #url { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: none; color: var(--text); font: inherit; font-size: 13.5px; text-align: center; user-select: text; }
+  #url:focus { text-align: left; }
+  #url::placeholder { color: var(--muted); }
+  #lock { color: var(--muted); }
+  #lock svg { width: 15px; height: 15px; }
+
+  /* ====== Carte de contenu (la page web est posée par-dessus) ====== */
+  /* La page web est collée à l'interface : plus de carte, de marge ni de bordure arrondie autour */
+
+  /* ====== Panneau latéral ====== */
+  #panel {
+    display: none; position: fixed; left: var(--rail); top: var(--top); bottom: 0;
+    width: var(--panel); overflow: hidden;
+    background: var(--card); border-right: 1px solid var(--line);
+  }
+  body.panel-open #panel { display: flex; flex-direction: column; }
+  #panel h2 { font-size: 15px; font-weight: 600; padding: 16px 16px 8px; }
+  #panel h3 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 16px 16px 6px; font-weight: 600; }
+  #pbody { flex: 1; overflow-y: auto; padding: 0 8px 12px; }
+  .item { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; cursor: pointer; }
+  .item:hover { background: var(--hover); }
+  .item img { width: 16px; height: 16px; border-radius: 4px; flex: none; }
+  .item .t { flex: 1; min-width: 0; }
+  .item .t b { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .t small { display: block; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .empty { color: var(--muted); padding: 24px 16px; text-align: center; line-height: 1.5; }
+  .form { display: grid; gap: 8px; padding: 4px 8px; }
+  .form input { height: 34px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--glass); color: var(--text); font: inherit; outline: 0; user-select: text; }
+  .form input:focus { border-color: var(--accent); }
+  .form button { height: 34px; border: 0; border-radius: 10px; background: var(--accent); color: var(--onaccent); font-weight: 600; cursor: pointer; }
+
+  /* ====== Contrôles de fenêtre (remplacent la barre de titre native) ====== */
+  #tabs { padding-right: 150px; }
+  #wc { position: fixed; top: 0; right: 0; height: 40px; display: flex; }
+  #wc button { width: 46px; height: 40px; border: 0; background: none; color: var(--text); display: grid; place-items: center; cursor: pointer; transition: background .12s, color .12s; }
+  #wc button:hover { background: var(--hover); }
+  #wc button.close:hover { background: var(--accent); color: var(--onaccent); }
+  #wc svg { width: 13px; height: 13px; stroke-width: 1.5; }
+  .ri.logo img { width: 26px; height: 26px; border-radius: 0; }
+
+
+  #wc { z-index: 600; }
+
+  /* ====== Réglages : fenêtre pop-up centrée ====== */
+  #overlay, #afill { position: fixed; inset: 0; z-index: 500; display: none; place-items: center; background: var(--scrim); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+  #overlay.open, #afill.open { display: grid; animation: fade .16s ease; }
+  @keyframes fade { from { opacity: 0; } }
+  @keyframes pop { from { opacity: 0; transform: translateY(10px) scale(.97); } }
+  #modal { display: flex; width: min(800px, 92vw); height: min(540px, 84vh); border-radius: 18px; overflow: hidden; background: var(--modal); border: 1px solid var(--line); backdrop-filter: blur(34px) saturate(1.4); -webkit-backdrop-filter: blur(34px) saturate(1.4); box-shadow: 0 30px 80px rgba(0,0,0,.45); animation: pop .22s cubic-bezier(.2,.9,.3,1.1); }
+  #mnav { width: 212px; flex: none; padding: 18px 10px; display: flex; flex-direction: column; gap: 2px; background: var(--glass); border-right: 1px solid var(--line); }
+  #mnav h1 { font-size: 15px; font-weight: 650; padding: 2px 10px 14px; }
+  .nv { display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 10px; border: 0; border-radius: 10px; background: none; color: var(--muted); cursor: pointer; text-align: left; transition: background .15s, color .15s; }
+  .nv:hover { background: var(--hover); color: var(--text); }
+  .nv.on { background: var(--glass2); color: var(--text); }
+  #mmain { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  #mhead { display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 4px 26px; }
+  #mhead h2 { font-size: 19px; font-weight: 600; }
+  #mbody { flex: 1; overflow-y: auto; padding: 6px 26px 26px; }
+  .hint { color: var(--muted); line-height: 1.5; margin: 0 0 14px; }
+  .grp { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 18px 0 8px; }
+  .grp:first-child { margin-top: 4px; }
+
+  .thm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .thm { padding: 8px; border-radius: 14px; border: 2px solid var(--line); background: none; color: var(--text); cursor: pointer; text-align: left; transition: border-color .15s, background .15s; }
+  .thm:hover { background: var(--hover); }
+  .thm.sel { border-color: var(--accent); }
+  .pv { position: relative; height: 96px; border-radius: 9px; overflow: hidden; }
+  .pv.noir { background: #121212; } .pv.blanc { background: #efefef; }
+  .pv::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 14%; background: rgba(127,127,127,.22); }
+  .pv::after { content: ""; position: absolute; left: 20%; right: 6%; top: 26%; bottom: 10%; border-radius: 6px; background: rgba(127,127,127,.24); }
+  .pv i { position: absolute; left: 20%; right: 6%; top: 8%; height: 11%; border-radius: 4px; background: rgba(127,127,127,.3); }
+  .thm .row { display: flex; align-items: center; justify-content: space-between; padding: 8px 4px 2px; font-weight: 500; }
+  .ck { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--muted); }
+  .sel > .row .ck, .opt.sel .ck { border-color: var(--accent); background: radial-gradient(var(--accent) 0 38%, transparent 44%); }
+
+  .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .opt { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px; border-radius: 11px; border: 1px solid var(--line); background: var(--glass); cursor: pointer; transition: background .15s; }
+  .opt:hover { background: var(--hover); }
+  .opt.sel { border-color: var(--accent); }
+  .opt img { width: 16px; height: 16px; border-radius: 4px; flex: none; }
+  .opt .n { flex: 1; font-weight: 500; }
+
+  .form { display: grid; gap: 8px; margin-top: 10px; }
+  .form.row { grid-template-columns: 1fr 1.4fr auto; }
+  .form input { height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--glass); color: var(--text); font: inherit; outline: 0; user-select: text; min-width: 0; }
+  .form input:focus { border-color: var(--accent); }
+  .form button, .btn { height: 36px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--accent); color: var(--onaccent); font-weight: 600; cursor: pointer; }
+  .kb { display: flex; align-items: center; justify-content: space-between; height: 42px; padding: 0 4px; border-bottom: 1px solid var(--line); }
+  .kb:last-child { border-bottom: 0; }
+  /* ---- Mots de passe ---- */
+  .pw-bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .pw-bar input { flex: 1; min-width: 0; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--glass); color: var(--text); font: inherit; outline: 0; user-select: text; }
+  .pw-bar input:focus { border-color: var(--accent); }
+  .btn.ghost { background: var(--glass2); color: var(--text); }
+  .banner { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--glass); line-height: 1.45; margin: 10px 0; }
+  .err { color: var(--text); font-weight: 600; margin-top: 8px; min-height: 1.2em; }
+  .pw-row { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-bottom: 1px solid var(--line); }
+  .pw-row .t { flex: 1; min-width: 0; }
+  .pw-row .t b { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pw-row .t small { display: block; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text; }
+  .pw-row .ph { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: var(--glass2); font-weight: 700; font-size: 12px; flex: none; }
+  .pw-row .ibtn { width: 30px; height: 30px; }
+  .pw-row .ibtn svg { width: 16px; height: 16px; }
+  .pw-row .ibtn.danger { width: auto; padding: 0 8px; font-weight: 600; }
+  #afbox { width: min(380px, 92vw); max-height: 80vh; overflow-y: auto; padding: 18px; border-radius: 18px; background: var(--modal); border: 1px solid var(--line); backdrop-filter: blur(34px) saturate(1.4); -webkit-backdrop-filter: blur(34px) saturate(1.4); box-shadow: 0 30px 80px rgba(0,0,0,.45); animation: pop .22s cubic-bezier(.2,.9,.3,1.1); }
+  #afbox h2 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  #afbox .pw-row { cursor: pointer; border-radius: 10px; border-bottom: 0; }
+  #afbox .pw-row:hover { background: var(--hover); }
+  #key.on { color: var(--accent); background: var(--glass2); }
+  .chips { display: flex; gap: 4px; }
+  .chip.bad { color: var(--text); border-color: var(--accent); }
+  .chip { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); flex: none; }
+  .chip.new { color: var(--text); border-color: var(--accent); }
+  .chk { display: flex; align-items: center; gap: 8px; margin: 8px 0; cursor: pointer; }
+  .chk input { width: 16px; height: 16px; accent-color: var(--accent); }
+  kbd { font: 12px ui-monospace, Consolas, monospace; padding: 3px 8px; border-radius: 7px; border: 1px solid var(--line); background: var(--glass); }
+</style>
+</head>
+<body>
+<iframe id="homeframe" src="home.html" allowtransparency="true" tabindex="-1"></iframe>
+  <!-- Barre latérale -->
+  <nav id="rail"></nav>
+
+  <!-- Onglets (en haut) + barre d'outils -->
+  <header id="top">
+    <div id="tabs"></div>
+    <div id="bar">
+      <button class="ibtn" id="back" title="Retour"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+      <button class="ibtn" id="fwd" title="Avancer"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+      <button class="ibtn" id="reload" title="Recharger"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+      <div id="urlwrap">
+        <span id="lock"><svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>
+        <input id="url" type="text" spellcheck="false" placeholder="Rechercher ou saisir une adresse">
+      </div>
+      <button class="ibtn" id="key" title="Mots de passe"><svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/></svg></button>
+      <button class="ibtn" id="star" title="Ajouter aux favoris (Ctrl+D)"><svg viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></button>
+      <button class="ibtn" id="zen" title="Activer / désactiver la page agrandie"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    </div>
+  </header>
+
+  <div id="wc">
+    <button id="wmin" title="Réduire"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+    <button id="wmax" title="Agrandir"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1"/></svg></button>
+    <button id="wclose" class="close" title="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+
+  <aside id="panel"><div id="pbody"></div></aside>
+
+  <!-- Remplissage automatique : petite fenêtre (les pages natives sont masquées le temps de l'afficher) -->
+  <div id="afill"><div id="afbox" role="dialog" aria-modal="true" aria-label="Mots de passe"></div></div>
+
+  <!-- Réglages : fenêtre pop-up -->
+  <div id="overlay">
+    <div id="modal" role="dialog" aria-modal="true" aria-label="Réglages">
+      <nav id="mnav"></nav>
+      <section id="mmain">
+        <header id="mhead"><h2 id="mtitle"></h2><button class="ibtn" id="mclose" title="Fermer (Échap)"></button></header>
+        <div id="mbody"></div>
+      </section>
+    </div>
+  </div>
+
+<script src="shared.js"></script>
+<script>
+  const { invoke } = window.__TAURI__.core;
+  const { listen } = window.__TAURI__.event;
+  const $ = (s) => document.querySelector(s);
+  const urlInput = $("#url");
+
+  const { store } = TX;
+
+  const ICONS = {
+    star: '<svg viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>',
+    clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+    gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+    close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    eye: '<svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+    copy: '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
+    trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
+    pen: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+    lockc: '<svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+  };
+
+  const host = (u) => { try { return new URL(u).hostname || u; } catch { return u; } };
+  // La page d'accueil Tweax est servie par l'application elle-même (même hôte que cette interface)
+  const isHome = (u) => { try { const x = new URL(u); return x.host === location.host && x.pathname === "/home.html"; } catch { return false; } };
+  const fav = (u) => `https://icons.duckduckgo.com/ip3/${host(u)}.ico`;
+  const pretty = (u) => u.replace(/^https?:\/\//, "").replace(/\/$/, "");
+
+  /* ---------- état ---------- */
+  let tabs = [];            // { id, url, loading }
+  let activeId = null;
+  let panel = null;         // { kind: "bookmarks"|"history"|"web", key? }
+  /* ---------- mises à jour (GitHub Releases) : vérification auto, installation uniquement sur clic ---------- */
+  const upd = { state: "idle", update: null, msg: "", pct: 0 }; // idle | checking | available | uptodate | downloading | error | off
+  const updRefresh = () => { renderRail(); if (settings && settings.section === "about") renderSettings(); };
+  async function checkUpdate() {
+    const u = window.__TAURI__ && window.__TAURI__.updater;
+    if (!u) { upd.state = "off"; return updRefresh(); }
+    upd.state = "checking"; updRefresh();
+    try {
+      const r = await u.check();
+      upd.update = r || null;
+      upd.state = r ? "available" : "uptodate";
+    } catch (e) { upd.state = "error"; upd.msg = String(e); }
+    updRefresh();
+  }
+  async function installUpdate() {
+    if (!upd.update) return;
+    upd.state = "downloading"; upd.pct = 0; updRefresh();
+    let total = 0, got = 0;
+    try {
+      await upd.update.downloadAndInstall((ev) => {
+        if (ev.event === "Started") total = ev.data.contentLength || 0;
+        else if (ev.event === "Progress") { got += ev.data.chunkLength; upd.pct = total ? Math.round(got / total * 100) : 0; const b = document.querySelector(".upd-bar > i"); if (b) b.style.width = upd.pct + "%"; }
+      });
+      await window.__TAURI__.process.relaunch();
+    } catch (e) { upd.state = "error"; upd.msg = String(e); updRefresh(); }
+  }
+  let settings = null;      // { section } quand la fenêtre de réglages est ouverte
+
+  let theme = TX.getTheme();
+  let bookmarks = store.get("bookmarks", []);
+  let history = store.get("history", []);
+  let sidebarApps = store.get("sidebarApps", [
+    { key: "whatsapp", name: "WhatsApp", url: "https://web.whatsapp.com/" },
+    { key: "discord",  name: "Discord",  url: "https://discord.com/app" },
+    { key: "chatgpt",  name: "ChatGPT",  url: "https://chatgpt.com/" },
+    { key: "spotify",  name: "Spotify",  url: "https://open.spotify.com/" },
+  ]);
+
+  const translucent = /Windows/i.test(navigator.userAgent);
+  const applyTheme = () => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.classList.toggle("tl", translucent);
+    invoke("set_tint", { dark: theme === "noir" }).catch(() => {});
+  };
+
+  /* ---------- barre latérale ---------- */
+  function renderRail() {
+    const rail = $("#rail");
+    rail.innerHTML = "";
+    const mk = (html, title, active, onclick, cls = "") => {
+      const b = document.createElement("button");
+      b.className = "ri " + cls + (active ? " active" : "");
+      b.title = title; b.innerHTML = html; b.onclick = onclick;
+      rail.appendChild(b);
+      return b;
+    };
+    const is = (kind, key) => panel && panel.kind === kind && panel.key === key;
+
+    const lg = mk('<img src="logo.png" alt="Tweax">', "Page d’accueil Tweax", false, () => activeId !== null && invoke("go_home", { id: activeId }), "logo");
+    rail.insertAdjacentHTML("beforeend", '<div class="sep"></div>');
+    mk(ICONS.star, "Favoris", is("bookmarks"), () => togglePanel({ kind: "bookmarks" }));
+    mk(ICONS.clock, "Historique", is("history"), () => togglePanel({ kind: "history" }));
+    rail.insertAdjacentHTML("beforeend", '<div class="sep"></div>');
+
+    for (const a of sidebarApps) {
+      const b = mk(`<img src="${fav(a.url)}" alt="">`, a.name, is("web", a.key), () => togglePanel({ kind: "web", key: a.key }));
+      b.querySelector("img").onerror = function () {
+        this.replaceWith(Object.assign(document.createElement("div"), { className: "ph", textContent: a.name[0].toUpperCase() }));
+      };
+    }
+    mk(ICONS.plus, "Ajouter un site à la barre latérale", false, () => openSettings("sidebar"));
+    rail.insertAdjacentHTML("beforeend", '<div class="grow"></div>');
+    const gb = mk(ICONS.gear, "Réglages (Ctrl+,)", !!settings, () => (settings ? closeSettings() : openSettings()));
+    if (upd.state === "available" || upd.state === "downloading") { gb.classList.add("has-upd"); gb.title = "Réglages — mise à jour disponible"; }
+  }
+
+  async function togglePanel(p) {
+    if (panel && panel.kind === p.kind && panel.key === p.key) return closePanel();
+    panel = p;
+    document.body.classList.add("panel-open");
+    if (p.kind === "web") {
+      const app = sidebarApps.find((a) => a.key === p.key);
+      if (!app) return closePanel();
+      $("#pbody").innerHTML = "";
+      await invoke("show_web_panel", { key: app.key, url: app.url });
+    } else {
+      await invoke("hide_web_panels");
+      await invoke("set_panel", { open: true });
+      renderPanel();
+    }
+    renderRail();
+  }
+
+  async function closePanel() {
+    panel = null;
+    document.body.classList.remove("panel-open");
+    await invoke("set_panel", { open: false });
+    renderRail();
+  }
+
+  /* ---------- panneaux internes ---------- */
+  function listItem(entry, onRemove, navigable = true) {
+    const el = document.createElement("div");
+    el.className = "item";
+    el.innerHTML = `<img src="${fav(entry.url)}" onerror="this.style.visibility='hidden'"><div class="t"><b></b><small></small></div>`;
+    el.querySelector("b").textContent = entry.title || host(entry.url);
+    el.querySelector("small").textContent = pretty(entry.url);
+    if (navigable) el.onclick = () => activeId !== null && invoke("navigate", { id: activeId, url: entry.url });
+    else el.style.cursor = "default";
+    if (onRemove) {
+      const x = document.createElement("button");
+      x.className = "ibtn"; x.innerHTML = ICONS.close; x.title = "Supprimer";
+      x.onclick = (e) => { e.stopPropagation(); onRemove(); };
+      el.appendChild(x);
+    }
+    return el;
+  }
+
+  function renderPanel() {
+    if (!panel || panel.kind === "web") return;
+    const body = $("#pbody");
+    body.innerHTML = "";
+    const title = (t) => body.insertAdjacentHTML("beforeend", `<h2>${t}</h2>`);
+    const sub = (t) => body.insertAdjacentHTML("beforeend", `<h3>${t}</h3>`);
+
+    if (panel.kind === "bookmarks") {
+      title("Favoris");
+      if (!bookmarks.length) body.insertAdjacentHTML("beforeend", '<div class="empty">Aucun favori.<br>Clique sur l’étoile à droite de la barre d’adresse.</div>');
+      bookmarks.forEach((b, i) => body.appendChild(listItem(b, () => { bookmarks.splice(i, 1); store.set("bookmarks", bookmarks); renderPanel(); updateStar(); })));
+    }
+
+    if (panel.kind === "history") {
+      title("Historique");
+      if (!history.length) body.insertAdjacentHTML("beforeend", '<div class="empty">Rien pour l’instant.</div>');
+      if (history.length) {
+        const q = document.createElement("div");
+        q.className = "form"; q.innerHTML = '<input placeholder="Rechercher dans l’historique" spellcheck="false">';
+        body.appendChild(q);
+        const holder = document.createElement("div");
+        body.appendChild(holder);
+        const draw = () => {
+          holder.innerHTML = "";
+          const n = q.querySelector("input").value.toLowerCase();
+          history.slice().reverse().filter((h) => !n || (h.url + " " + h.title).toLowerCase().includes(n)).slice(0, 150).forEach((h) => holder.appendChild(listItem(h)));
+        };
+        q.querySelector("input").oninput = draw; draw();
+      }
+      if (history.length) {
+        const clear = document.createElement("div");
+        clear.className = "form"; clear.style.marginTop = "10px";
+        clear.innerHTML = "<button>Effacer l’historique</button>";
+        clear.querySelector("button").onclick = () => { history = []; store.set("history", history); renderPanel(); };
+        body.appendChild(clear);
+      }
+    }
+
+  }
+
+  /* ---------- réglages (fenêtre pop-up) ---------- */
+  const SECTIONS = [
+    { id: "appearance", label: "Apparence", icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>' },
+    { id: "search", label: "Recherche", icon: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>' },
+    { id: "sidebar", label: "Barre latérale", icon: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>' },
+    { id: "passwords", label: "Mots de passe", icon: '<svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/></svg>' },
+    { id: "about", label: "Mises à jour", icon: '<svg viewBox="0 0 24 24"><path d="M12 4v10m0 0l-4-4m4 4l4-4M5 19h14"/></svg>' },
+    { id: "keys", label: "Raccourcis", icon: '<svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6.5 10h.01M10 10h.01M13.5 10h.01M17 10h.01M7 14h10"/></svg>' },
+  ];
+
+  async function openSettings(section) {
+    if (settings) { settings.section = section || settings.section; return renderSettings(); }
+    // On range le panneau latéral, puis on masque les pages natives (elles passent au-dessus de l'interface)
+    if (panel) { panel = null; document.body.classList.remove("panel-open"); await invoke("set_panel", { open: false }); }
+    settings = { section: section || "appearance" };
+    await invoke("hide_tabs");
+    $("#overlay").classList.add("open");
+    renderSettings(); renderRail();
+  }
+
+  async function closeSettings() {
+    if (!settings) return;
+    settings = null;
+    $("#overlay").classList.remove("open");
+    renderRail();
+    lastMode = ""; render();
+  }
+
+  /* ---------- mots de passe : coffre chiffré + import depuis un autre navigateur ---------- */
+  let renderSeq = 0;
+  let vaultTimer = null;
+  const vaultLock = () => { clearTimeout(vaultTimer); invoke("vault_lock").catch(() => {}); };
+  // Verrouillage automatique après 10 min sans action (le coffre reste ouvert entre-temps pour le remplissage)
+  const vaultTouch = () => { clearTimeout(vaultTimer); vaultTimer = setTimeout(async () => { await invoke("vault_lock").catch(() => {}); if (settings) { settings.vault = null; renderSettings(); } refreshKey(); }, 10 * 60 * 1000); };
+  const errText = (e) => (typeof e === "string" ? e : (e && e.message) || "Erreur");
+
+  async function renderPasswords(body, seq) {
+    let st;
+    try { st = await invoke("vault_status"); } catch (e) { body.textContent = errText(e); return; }
+    if (!settings || settings.section !== "passwords" || seq !== renderSeq) return; // l'utilisateur a changé de page entre-temps
+    const V = (settings.vault = settings.vault || { view: "list", q: "", msg: "" });
+    const el = (html, parent = body) => { const d = document.createElement("div"); d.innerHTML = html; const n = d.firstElementChild; parent.appendChild(n); return n; };
+    const letter = (n) => `<div class="ph"></div>`;
+
+    // --- 1) pas encore de coffre : création ---
+    if (!st.exists) {
+      el('<p class="hint">Tes mots de passe importés sont chiffrés (Argon2id + XChaCha20-Poly1305) dans un coffre local protégé par un mot de passe maître. <b>Il ne peut pas être récupéré si tu l’oublies.</b></p>');
+      const f = el('<div class="form"><input id="m1" type="password" placeholder="Mot de passe maître (8 caractères min.)" autocomplete="off"><input id="m2" type="password" placeholder="Confirmer" autocomplete="off"><div><button class="btn">Créer le coffre</button></div><div class="err"></div></div>');
+      const go = async () => {
+        const a = f.querySelector("#m1").value, b = f.querySelector("#m2").value, err = f.querySelector(".err");
+        if (a !== b) return (err.textContent = "Les deux mots de passe sont différents.");
+        try { await invoke("vault_create", { master: a }); vaultTouch(); renderSettings(); } catch (e) { err.textContent = errText(e); }
+      };
+      f.querySelector("button").onclick = go;
+      f.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+      return;
+    }
+
+    // --- 2) coffre verrouillé ---
+    if (!st.unlocked) {
+      el('<p class="hint">Le coffre est verrouillé.</p>');
+      const f = el('<div class="form"><input id="m1" type="password" placeholder="Mot de passe maître" autocomplete="off"><div><button class="btn">Déverrouiller</button></div><div class="err"></div></div>');
+      const go = async () => {
+        const btn = f.querySelector("button"), err = f.querySelector(".err");
+        btn.disabled = true; err.textContent = "";
+        try { await invoke("vault_unlock", { master: f.querySelector("#m1").value }); vaultTouch(); renderSettings(); }
+        catch (e) { err.textContent = errText(e); btn.disabled = false; }
+      };
+      f.querySelector("button").onclick = go;
+      f.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+      setTimeout(() => f.querySelector("#m1").focus(), 0);
+      return;
+    }
+
+    vaultTouch();
+
+    // --- 3-bis) ajout / modification d'une entrée ---
+    if (V.view === "edit") {
+      const e0 = V.edit || {};
+      el(`<p class="hint">${e0.id ? "Modifier l’entrée" : "Nouvelle entrée"}</p>`);
+      const f = el('<div class="form"><input id="fn" placeholder="Nom (facultatif)"><input id="fu" placeholder="Adresse du site (https://…)"><input id="fl" placeholder="Identifiant / e-mail" autocomplete="off"><div class="pw-bar" style="margin:0"><input id="fp" type="password" placeholder="Mot de passe" autocomplete="off"><button class="btn ghost" id="gen" type="button">Générer</button></div><div class="pw-bar" style="margin:0"><button class="btn" id="sv">Enregistrer</button><button class="btn ghost" id="cn">Annuler</button></div><div class="err"></div></div>');
+      f.querySelector("#fn").value = e0.name || ""; f.querySelector("#fu").value = e0.url || ""; f.querySelector("#fl").value = e0.username || ""; f.querySelector("#fp").value = e0.password || "";
+      f.querySelector("#gen").onclick = () => { const i = f.querySelector("#fp"); i.value = genPassword(20); i.type = "text"; };
+      f.querySelector("#cn").onclick = () => { V.view = "list"; V.edit = null; renderSettings(); };
+      f.querySelector("#sv").onclick = async () => {
+        try {
+          await invoke("vault_save", { id: e0.id ?? null, name: f.querySelector("#fn").value, url: f.querySelector("#fu").value, username: f.querySelector("#fl").value, password: f.querySelector("#fp").value, note: null });
+          V.view = "list"; V.edit = null; V.msg = "Entrée enregistrée."; V.warnCsv = false; renderSettings();
+        } catch (e) { f.querySelector(".err").textContent = errText(e); }
+      };
+      return;
+    }
+
+    // --- 3-ter) changer le mot de passe maître ---
+    if (V.view === "master") {
+      el('<p class="hint">Changer le mot de passe maître. Le coffre est ré-chiffré avec la nouvelle clé.</p>');
+      const f = el('<div class="form"><input id="o" type="password" placeholder="Mot de passe maître actuel" autocomplete="off"><input id="n1" type="password" placeholder="Nouveau mot de passe maître (8 caractères min.)" autocomplete="off"><input id="n2" type="password" placeholder="Confirmer le nouveau" autocomplete="off"><div class="pw-bar" style="margin:0"><button class="btn" id="sv">Changer</button><button class="btn ghost" id="cn">Annuler</button></div><div class="err"></div></div>');
+      f.querySelector("#cn").onclick = () => { V.view = "list"; renderSettings(); };
+      f.querySelector("#sv").onclick = async () => {
+        const err = f.querySelector(".err");
+        if (f.querySelector("#n1").value !== f.querySelector("#n2").value) return (err.textContent = "Les deux nouveaux mots de passe sont différents.");
+        try { await invoke("vault_change_master", { old: f.querySelector("#o").value, new: f.querySelector("#n1").value }); V.view = "list"; V.msg = "Mot de passe maître changé."; V.warnCsv = false; renderSettings(); }
+        catch (e) { err.textContent = errText(e); }
+      };
+      return;
+    }
+
+    // --- 3a) aperçu d'un import en attente ---
+    if (V.view === "preview" && V.preview) {
+      const pv = V.preview;
+      el(`<p class="hint">Format détecté : <b></b>. ${pv.rows.length} identifiant(s) lu(s)${pv.invalid ? `, ${pv.invalid} ligne(s) ignorée(s) (sans mot de passe ou page interne)` : ""}.</p>`).querySelector("b").textContent = pv.format;
+      el(`<div class="banner"><b>${pv.new}</b> nouveau(x) · <b>${pv.duplicates}</b> déjà présent(s) · <b>${pv.conflicts}</b> avec un mot de passe différent</div>`);
+      let replace = false;
+      if (pv.conflicts) {
+        const c = el(`<label class="chk"><input type="checkbox"> Remplacer les ${pv.conflicts} mot(s) de passe différent(s) par ceux de l’import</label>`);
+        c.querySelector("input").onchange = (e) => (replace = e.target.checked);
+      }
+      const bar = el('<div class="pw-bar"><button class="btn" id="ok">Importer</button><button class="btn ghost" id="no">Annuler</button></div>');
+      const err = el('<div class="err"></div>');
+      bar.querySelector("#no").onclick = async () => { await invoke("vault_import_cancel").catch(() => {}); V.view = "list"; V.preview = null; renderSettings(); };
+      bar.querySelector("#ok").onclick = async () => {
+        try {
+          const r = await invoke("vault_import_commit", { replaceConflicts: replace });
+          V.view = "list"; V.preview = null;
+          V.msg = `${r.added} ajouté(s)` + (r.updated ? `, ${r.updated} mis à jour` : "") + (r.skipped ? `, ${r.skipped} ignoré(s)` : "") + ".";
+          V.warnCsv = true;
+          renderSettings();
+        } catch (e) { err.textContent = errText(e); }
+      };
+      const chipLabel = { new: "Nouveau", duplicate: "Déjà présent", conflict: "Différent" };
+      for (const r of pv.rows.slice(0, 400)) {
+        const row = el('<div class="pw-row"><div class="ph"></div><div class="t"><b></b><small></small></div><span class="chip"></span></div>');
+        row.querySelector(".ph").textContent = (r.name[0] || "?").toUpperCase();
+        row.querySelector("b").textContent = r.name;
+        row.querySelector("small").textContent = r.username || "(sans identifiant)";
+        const ch = row.querySelector(".chip"); ch.textContent = chipLabel[r.status]; ch.classList.add(r.status);
+      }
+      if (pv.rows.length > 400) el(`<div class="empty">… et ${pv.rows.length - 400} autres</div>`);
+      return;
+    }
+
+    // --- 3b) liste du coffre ---
+    el(`<p class="hint">${st.count} identifiant(s) dans le coffre.</p>`);
+    const bar = el('<div class="pw-bar"><button class="btn" id="imp">Importer depuis un navigateur</button><button class="btn ghost" id="add">Ajouter</button><button class="btn ghost" id="mm" title="Changer le mot de passe maître">Mot de passe maître</button><button class="btn ghost" id="lk" title="Verrouiller">Verrouiller</button><input type="file" id="file" accept=".csv,text/csv" hidden></div>');
+    const file = bar.querySelector("#file");
+    bar.querySelector("#imp").onclick = () => file.click();
+    bar.querySelector("#lk").onclick = async () => { await invoke("vault_lock"); V.view = "list"; renderSettings(); refreshKey(); };
+    bar.querySelector("#add").onclick = () => { V.view = "edit"; V.edit = {}; renderSettings(); };
+    bar.querySelector("#mm").onclick = () => { V.view = "master"; renderSettings(); };
+    file.onchange = async () => {
+      const f = file.files[0]; if (!f) return;
+      try {
+        const text = await f.text();
+        V.preview = await invoke("vault_import_preview", { csv: text });
+        V.view = "preview"; V.msg = "";
+      } catch (e) { V.msg = "Import impossible : " + errText(e); V.warnCsv = false; }
+      file.value = "";
+      renderSettings();
+    };
+    if (V.msg) el('<div class="banner"></div>').textContent = V.msg;
+    if (V.warnCsv) el("<div class=\"banner\">⚠ Le fichier CSV exporté contient tes mots de passe <b>en clair</b> : supprime-le maintenant (et vide la corbeille).</div>");
+    if (!st.count) {
+      el('<div class="banner">Pour exporter depuis ton ancien navigateur :<br>• <b>Chrome / Edge / Brave / Opera</b> : Paramètres → Mots de passe → ⋯ → Exporter les mots de passe<br>• <b>Firefox</b> : about:logins → ⋯ → Exporter les identifiants<br>• <b>Safari</b> : Fichier → Exporter → Mots de passe<br>Puis clique sur « Importer ».</div>');
+    }
+    let list;
+    let audit = [];
+    try { list = await invoke("vault_list"); audit = await invoke("vault_audit"); } catch (e) { el('<div class="err"></div>').textContent = errText(e); return; }
+    if (!settings || seq !== renderSeq) return;
+    const bad = {}; for (const a of audit) (bad[a.id] = bad[a.id] || []).push(a.reason);
+    const nWeak = audit.filter((a) => a.reason === "weak").length, nReuse = audit.filter((a) => a.reason === "reused").length;
+    if (nWeak || nReuse) el(`<div class="banner">🔍 Audit : <b>${nWeak}</b> mot(s) de passe faible(s), <b>${nReuse}</b> réutilisé(s) sur plusieurs sites. Pense à les changer.</div>`);
+    if (list.length) {
+      const q = el('<div class="pw-bar"><input placeholder="Rechercher" spellcheck="false"></div>').querySelector("input");
+      q.value = V.q || "";
+      const holder = el("<div></div>");
+      const draw = () => {
+        holder.innerHTML = "";
+        const needle = q.value.toLowerCase();
+        V.q = q.value;
+        for (const e of list.filter((x) => (x.name + " " + x.url + " " + x.username).toLowerCase().includes(needle))) {
+          const row = el('<div class="pw-row"><div class="ph"></div><div class="t"><b></b><small></small></div><span class="chips"></span><button class="ibtn" data-a="eye" title="Afficher"></button><button class="ibtn" data-a="pen" title="Modifier"></button><button class="ibtn" data-a="copy" title="Copier le mot de passe"></button><button class="ibtn" data-a="del" title="Supprimer"></button></div>', holder);
+          row.querySelector(".ph").textContent = (e.name[0] || "?").toUpperCase();
+          row.querySelector("b").textContent = e.name;
+          const small = row.querySelector("small"); small.textContent = e.username || "(sans identifiant)";
+          for (const r of bad[e.id] || []) { const c = document.createElement("span"); c.className = "chip bad"; c.textContent = r === "weak" ? "Faible" : "Réutilisé"; row.querySelector(".chips").appendChild(c); }
+          const [eye, pen, copy, del] = row.querySelectorAll("button");
+          pen.innerHTML = ICONS.pen;
+          pen.onclick = async () => { try { V.edit = { ...e, password: await invoke("vault_reveal", { id: e.id }) }; V.view = "edit"; renderSettings(); } catch (err) { small.textContent = errText(err); } };
+          eye.innerHTML = ICONS.eye; copy.innerHTML = ICONS.copy; del.innerHTML = ICONS.trash;
+          let shown = false;
+          eye.onclick = async () => {
+            shown = !shown;
+            try { small.textContent = shown ? (e.username ? e.username + " · " : "") + (await invoke("vault_reveal", { id: e.id })) : (e.username || "(sans identifiant)"); vaultTouch(); }
+            catch (err) { small.textContent = errText(err); }
+          };
+          copy.onclick = async () => {
+            try {
+              await navigator.clipboard.writeText(await invoke("vault_reveal", { id: e.id }));
+              copy.title = "Copié (effacé du presse-papiers dans 30 s)"; vaultTouch();
+              setTimeout(() => navigator.clipboard.writeText("").catch(() => {}), 30000);
+            } catch (err) { copy.title = errText(err); }
+          };
+          let armed = false;
+          del.onclick = async () => {
+            if (!armed) { armed = true; del.className = "ibtn danger"; del.textContent = "Confirmer ?"; setTimeout(() => { if (del.isConnected) { armed = false; del.className = "ibtn"; del.innerHTML = ICONS.trash; } }, 3000); return; }
+            await invoke("vault_delete", { id: e.id }); renderSettings();
+          };
+        }
+      };
+      q.oninput = draw; draw();
+    }
+  }
+
+  // Mot de passe aléatoire (crypto.getRandomValues, sans biais de modulo), avec les 4 classes de caractères
+  function genPassword(n = 20) {
+    const sets = ["abcdefghijkmnopqrstuvwxyz", "ABCDEFGHJKLMNPQRSTUVWXYZ", "23456789", "!@#$%^&*-_=+?"];
+    const all = sets.join("");
+    const rnd = (max) => { const lim = Math.floor(2 ** 32 / max) * max; const a = new Uint32Array(1); do crypto.getRandomValues(a); while (a[0] >= lim); return a[0] % max; };
+    for (;;) {
+      let s = ""; for (let i = 0; i < n; i++) s += all[rnd(all.length)];
+      if (sets.every((st) => [...st].some((c) => s.includes(c)))) return s;
+    }
+  }
+
+  /* ---------- mode agrandi / masquage des barres ---------- */
+  // zenHidden = état visuel courant des barres.
+  // zenMode = mode automatique activé par le bouton (reste actif quand les barres
+  // réapparaissent au survol). Séparer les deux évite que le clic suivant réactive le mode.
+  let zenHidden = false;
+  let zenMode = false; // désactivé par défaut : seul le bouton l'active
+  let zenBusy = false;
+
+  async function setZen(on, autoHide = null) {
+    if (zenBusy || settings || afillOpen) return;
+    if (on === zenHidden && (autoHide === null || autoHide === zenMode)) return;
+    zenBusy = true;
+    try {
+      if (on && panel) await closePanel();
+      await invoke("set_zen", { on, autoHide });
+      zenHidden = on;
+      if (autoHide !== null) zenMode = autoHide;
+      document.body.classList.toggle("zen", on);
+      $("#zen").classList.toggle("on", zenMode);
+      $("#zen").title = zenMode
+        ? "Désactiver le masquage automatique"
+        : "Activer le masquage automatique";
+    } catch (err) {
+      console.error("Impossible de changer le mode agrandi :", err);
+    } finally {
+      zenBusy = false;
+    }
+  }
+
+  // Le bouton change le mode, pas seulement la visibilité momentanée des barres.
+  // Ainsi, après un retour au survol, le clic désactive bien le mode au lieu de le réactiver.
+  $("#zen").onclick = () => {
+    const enable = !zenMode;
+    setZen(enable, enable);
+  };
+
+  $("#zen").classList.toggle("on", zenMode);
+  $("#zen").title = "Activer le masquage automatique";
+
+  /* ---------- remplissage automatique (clé dans la barre d'outils) ---------- */
+  let afillOpen = false;
+  async function refreshKey() {
+    const cur = tabs.find((t) => t.id === activeId);
+    let n = 0;
+    try {
+      if (cur && /^https?:/.test(cur.url) && !isHome(cur.url)) {
+        const st = await invoke("vault_status");
+        if (st.unlocked) n = (await invoke("vault_matches", { host: host(cur.url) })).length;
+      }
+    } catch {}
+    $("#key").classList.toggle("on", n > 0);
+    $("#key").title = n ? `Remplir l’identifiant (${n})` : "Mots de passe";
+  }
+  async function openAutofill() {
+    if (afillOpen) return closeAutofill();
+    if (settings) return;
+    await invoke("hide_tabs");
+    afillOpen = true;
+    $("#afill").classList.add("open");
+    renderAutofill();
+  }
+  async function closeAutofill() {
+    if (!afillOpen) return;
+    afillOpen = false;
+    $("#afill").classList.remove("open");
+    lastMode = ""; render();
+    refreshKey();
+  }
+  async function renderAutofill() {
+    const box = $("#afbox");
+    box.innerHTML = "<h2>Mots de passe</h2>";
+    const add = (html) => { const d = document.createElement("div"); d.innerHTML = html; const n = d.firstElementChild; box.appendChild(n); return n; };
+    let st;
+    try { st = await invoke("vault_status"); } catch (e) { return add('<div class="err"></div>').append(errText(e)); }
+    if (!afillOpen) return;
+    const toSettings = (label) => { const b = add(`<div class="form"><button class="btn">${label}</button></div>`).querySelector("button"); b.onclick = async () => { await closeAutofill(); openSettings("passwords"); }; };
+    if (!st.exists) { add('<p class="hint">Aucun coffre pour l’instant. Crée-le puis importe tes mots de passe depuis ton ancien navigateur.</p>'); return toSettings("Ouvrir les réglages"); }
+    if (!st.unlocked) {
+      const f = add('<div class="form"><input type="password" placeholder="Mot de passe maître" autocomplete="off"><button class="btn">Déverrouiller</button><div class="err"></div></div>');
+      const go = async () => { try { await invoke("vault_unlock", { master: f.querySelector("input").value }); vaultTouch(); renderAutofill(); } catch (e) { f.querySelector(".err").textContent = errText(e); } };
+      f.querySelector("button").onclick = go;
+      f.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+      setTimeout(() => f.querySelector("input").focus(), 0);
+      return;
+    }
+    vaultTouch();
+    const cur = tabs.find((t) => t.id === activeId);
+    if (!cur || !/^https:/.test(cur.url) || isHome(cur.url)) { add('<p class="hint">Ouvre une page de connexion en HTTPS pour remplir un identifiant.</p>'); return toSettings("Gérer les mots de passe"); }
+    let list = [];
+    try { list = await invoke("vault_matches", { host: host(cur.url) }); } catch (e) { return add('<div class="err"></div>').append(errText(e)); }
+    if (!afillOpen) return;
+    if (!list.length) add(`<p class="hint">Aucun identifiant enregistré pour <b></b>.</p>`).querySelector("b").textContent = host(cur.url);
+    const err = add('<div class="err"></div>');
+    for (const e of list) {
+      const row = add('<div class="pw-row"><div class="ph"></div><div class="t"><b></b><small></small></div></div>');
+      row.querySelector(".ph").textContent = (e.name[0] || "?").toUpperCase();
+      row.querySelector("b").textContent = e.name;
+      row.querySelector("small").textContent = e.username || "(sans identifiant)";
+      row.onclick = async () => { try { await invoke("vault_autofill", { tabId: activeId, entryId: e.id }); await closeAutofill(); } catch (x) { err.textContent = errText(x); } };
+    }
+    toSettings("Gérer les mots de passe");
+  }
+
+  function renderSettings() {
+    if (!settings) return;
+    const nav = $("#mnav"), body = $("#mbody");
+    nav.innerHTML = "<h1>Réglages</h1>";
+    for (const sec of SECTIONS) {
+      const b = document.createElement("button");
+      b.className = "nv" + (sec.id === settings.section ? " on" : "");
+      b.innerHTML = sec.icon + "<span>" + sec.label + "</span>";
+      b.onclick = () => { settings.section = sec.id; renderSettings(); };
+      nav.appendChild(b);
+    }
+    $("#mtitle").textContent = SECTIONS.find((x) => x.id === settings.section).label;
+    body.innerHTML = "";
+    const grp = (t) => body.insertAdjacentHTML("beforeend", `<div class="grp">${t}</div>`);
+    const hint = (t) => body.insertAdjacentHTML("beforeend", `<p class="hint">${t}</p>`);
+
+    if (settings.section === "appearance") {
+      hint("Choisis l’ambiance de Tweax. Sous Windows, la fenêtre reste translucide dans les deux thèmes.");
+      const g = document.createElement("div");
+      g.className = "thm-grid";
+      for (const [k, label] of [["noir", "Noir"], ["blanc", "Blanc"]]) {
+        const b = document.createElement("button");
+        b.className = "thm" + (k === theme ? " sel" : "");
+        b.innerHTML = `<div class="pv ${k}"><i></i></div><div class="row"><span>${label}</span><span class="ck"></span></div>`;
+        b.onclick = () => { theme = k; store.set("theme", k); applyTheme(); renderSettings(); };
+        g.appendChild(b);
+      }
+      body.appendChild(g);
+    }
+
+    if (settings.section === "search") {
+      hint("Utilisé par la barre d’adresse et par la page d’accueil.");
+      const cur = TX.getEngineId();
+      const o = document.createElement("div");
+      o.className = "opts";
+      const options = Object.entries(TX.ENGINES).map(([id, e]) => [id, e.name, e.url]).concat([["custom", "Personnalisé", ""]]);
+      for (const [id, label, url] of options) {
+        const b = document.createElement("div");
+        b.className = "opt" + (id === cur ? " sel" : "");
+        b.innerHTML = (url ? `<img src="${fav(url)}" onerror="this.style.visibility='hidden'">` : "") + `<span class="n"></span><span class="ck"></span>`;
+        b.querySelector(".n").textContent = label;
+        b.onclick = () => { store.set("engine", id); renderSettings(); };
+        o.appendChild(b);
+      }
+      body.appendChild(o);
+      if (cur === "custom") {
+        grp("Adresse du moteur");
+        const cf = document.createElement("div");
+        cf.className = "form";
+        cf.innerHTML = '<input id="ce" placeholder="https://exemple.com/search?q=%s"><div><button class="btn">Enregistrer</button></div>';
+        const input = cf.querySelector("#ce");
+        input.value = store.get("customEngine", "");
+        cf.querySelector("button").onclick = () => {
+          const v = input.value.trim();
+          if (!/^https?:\/\/.+%s/.test(v)) { input.style.borderColor = "var(--accent)"; input.value = ""; input.placeholder = "L’adresse doit contenir %s"; return; }
+          store.set("customEngine", v); renderSettings();
+        };
+        body.appendChild(cf);
+      }
+    }
+
+    if (settings.section === "sidebar") {
+      hint("Les sites de la barre latérale s’ouvrent à gauche et gardent leur session.");
+      if (!sidebarApps.length) body.insertAdjacentHTML("beforeend", '<div class="empty">Aucun site pour l’instant.</div>');
+      for (const a of sidebarApps) {
+        body.appendChild(listItem({ url: a.url, title: a.name }, async () => {
+          sidebarApps = sidebarApps.filter((x) => x.key !== a.key);
+          store.set("sidebarApps", sidebarApps);
+          await invoke("close_web_panel", { key: a.key });
+          renderRail(); renderSettings();
+        }, false));
+      }
+      grp("Ajouter un site");
+      const f = document.createElement("div");
+      f.className = "form row";
+      f.innerHTML = '<input id="an" placeholder="Nom (ex. Telegram)"><input id="au" placeholder="web.telegram.org"><button>Ajouter</button>';
+      const add = () => {
+        const name = f.querySelector("#an").value.trim();
+        let url = f.querySelector("#au").value.trim();
+        if (!name || !url) return;
+        if (!/^https?:\/\//.test(url)) url = "https://" + url;
+        sidebarApps.push({ key: "c" + Date.now(), name, url });
+        store.set("sidebarApps", sidebarApps);
+        renderRail(); renderSettings();
+      };
+      f.querySelector("button").onclick = add;
+      f.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
+      body.appendChild(f);
+    }
+
+    if (settings.section === "passwords") renderPasswords(body, ++renderSeq);
+
+    if (settings.section === "about") {
+      const card = document.createElement("div");
+      card.className = "upd-card";
+      const line = (t) => { const p = document.createElement("div"); p.textContent = t; card.appendChild(p); return p; };
+      const btn = (t, f, ghost) => { const b = document.createElement("button"); b.className = "btn" + (ghost ? " ghost" : ""); b.textContent = t; b.onclick = f; card.appendChild(b); return b; };
+      if (upd.state === "off") line("Les mises à jour ne sont pas activées dans cette version (build de développement).");
+      else if (upd.state === "checking") line("Recherche de mises à jour…");
+      else if (upd.state === "uptodate") { line("Tweax est à jour."); btn("Vérifier à nouveau", checkUpdate); }
+      else if (upd.state === "available") {
+        line(`Version ${upd.update.version} disponible.`);
+        if (upd.update.body) { const n = line(upd.update.body); n.style.cssText = "color:var(--muted);white-space:pre-wrap;font-size:12.5px"; }
+        btn("Télécharger et installer", installUpdate);
+      } else if (upd.state === "downloading") { line("Téléchargement… " + upd.pct + " %"); card.insertAdjacentHTML("beforeend", `<div class="upd-bar"><i style="width:${upd.pct}%"></i></div>`); }
+      else if (upd.state === "error") { line("La vérification a échoué."); const n = line(upd.msg); n.style.cssText = "color:var(--muted);font-size:12px"; btn("Réessayer", checkUpdate); }
+      else { line("Aucune vérification effectuée."); btn("Vérifier maintenant", checkUpdate); }
+      body.appendChild(card);
+      const auto = TX.store.get("autoCheckUpdates", true);
+      const o = document.createElement("div");
+      o.className = "opts";
+      const row = document.createElement("div");
+      row.className = "opt" + (auto ? " sel" : "");
+      row.innerHTML = '<span>Rechercher automatiquement au démarrage (l’installation reste toujours manuelle)</span><span class="ck"></span>';
+      row.onclick = () => { TX.store.set("autoCheckUpdates", !auto); renderSettings(); };
+      o.appendChild(row); body.appendChild(o);
+    }
+
+    if (settings.section === "keys") {
+      for (const [label, k] of [["Nouvel onglet", "Ctrl + T"], ["Fermer l’onglet", "Ctrl + W"], ["Barre d’adresse", "Ctrl + L"], ["Ajouter aux favoris", "Ctrl + D"], ["Page en grand", "Ctrl + Maj + F"], ["Réglages", "Ctrl + ,"], ["Fermer les réglages", "Échap"]]) {
+        body.insertAdjacentHTML("beforeend", `<div class="kb"><span>${label}</span><kbd>${k}</kbd></div>`);
+      }
+    }
+  }
+
+  /* ---------- onglets ---------- */
+  function updateStar() {
+    const cur = tabs.find((t) => t.id === activeId);
+    $("#star").classList.toggle("on", !!cur && !isHome(cur.url) && bookmarks.some((b) => b.url === cur.url));
+  }
+
+  // Vérification discrète au démarrage (n'installe jamais rien sans clic)
+  setTimeout(() => { if (TX.store.get("autoCheckUpdates", true)) checkUpdate(); }, 4000);
+
+  let lastMode = "";
+  function render() {
+    const wrap = $("#tabs");
+    wrap.innerHTML = "";
+    for (const t of tabs) {
+      const el = document.createElement("div");
+      el.className = "tab" + (t.id === activeId ? " active" : "");
+      const home = !t.url || isHome(t.url);
+      const h = home ? "Nouvel onglet" : host(t.url);
+      el.innerHTML = (home ? '<img src="logo.png" alt="">'
+                    : t.loading ? '<div class="spin"></div>'
+                    : `<img src="${fav(t.url)}" onerror="this.style.visibility='hidden'">`)
+                   + `<span class="title"></span><button class="x" title="Fermer">${ICONS.close}</button>`;
+      el.querySelector(".title").textContent = h;
+      el.onclick = () => activate(t.id);
+      el.querySelector(".x").onclick = (e) => { e.stopPropagation(); closeTab(t.id); };
+      el.onauxclick = (e) => { if (e.button === 1) closeTab(t.id); };
+      wrap.appendChild(el);
+    }
+    const plus = document.createElement("button");
+    plus.className = "ibtn"; plus.title = "Nouvel onglet (Ctrl+T)"; plus.innerHTML = ICONS.plus;
+    plus.onclick = () => newTab();
+    wrap.appendChild(plus);
+
+    const cur = tabs.find((t) => t.id === activeId);
+    if (cur && document.activeElement !== urlInput) urlInput.value = isHome(cur.url) ? "" : pretty(cur.url);
+    $("#lock").style.opacity = cur && cur.url.startsWith("https://") ? 1 : .35;
+    const onHome = !!cur && (!cur.url || isHome(cur.url));
+    document.body.classList.toggle("home", onHome);
+    document.body.classList.toggle("home-ui", onHome);
+    // Accueil = iframe transparente de l'interface ; sinon on montre la page native
+    const mode = cur ? (onHome ? "h" : "n") + cur.id : "";
+    if (cur && mode !== lastMode) {
+      lastMode = mode;
+      if (!settings && !afillOpen) invoke(onHome ? "hide_all_tabs_cmd" : "switch_tab", onHome ? {} : { id: cur.id }).catch(() => {});
+    }
+    updateStar();
+    refreshKey();
+  }
+
+  async function newTab(url) {
+    const id = await invoke("new_tab", { url: url ?? null });
+    tabs.push({ id, url: url ?? "", loading: true });
+    activeId = id;
+    render();
+    if (!url) { urlInput.value = ""; urlInput.focus(); }
+  }
+
+  async function activate(id) {
+    activeId = id;
+    lastMode = ""; // force la resynchronisation native/accueil dans render()
+    render();
+  }
+
+  async function closeTab(id) {
+    const i = tabs.findIndex((t) => t.id === id);
+    if (i < 0) return;
+    await invoke("close_tab", { id });
+    tabs.splice(i, 1);
+    if (tabs.length === 0) return newTab();
+    if (activeId === id) await activate(tabs[Math.min(i, tabs.length - 1)].id);
+    else render();
+  }
+
+  // Les événements de bord ne changent que l'affichage temporaire des barres.
+  // Ils ne modifient jamais zenMode : seul le bouton active/désactive le mode.
+  listen("zen-enter", () => { if (zenMode && !zenHidden) setZen(true, null); });
+  listen("zen-exit", () => { if (zenMode && zenHidden) setZen(false, null); });
+
+  window.addEventListener("message", (e) => {
+    if (e.source !== $("#homeframe").contentWindow) return;
+    const u = e.data && e.data.tweaxGo;
+    if (typeof u === "string" && /^(https?|file):/i.test(u) && activeId !== null) invoke("navigate", { id: activeId, url: u });
+  });
+
+  listen("tab-updated", ({ payload }) => {
+    const t = tabs.find((x) => x.id === payload.id);
+    if (!t) return;
+    t.url = payload.url;
+    t.loading = payload.loading;
+    if (!payload.loading && /^https?:/.test(t.url) && !isHome(t.url) && (!history.length || history[history.length - 1].url !== t.url)) {
+      history.push({ url: t.url, title: host(t.url), t: Date.now() });
+      if (history.length > 300) history = history.slice(-300);
+      store.set("history", history);
+      if (panel && panel.kind === "history") renderPanel();
+    }
+    render();
+  });
+
+  /* ---------- barre d'adresse & boutons ---------- */
+  urlInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && activeId !== null) {
+      const target = TX.resolve(urlInput.value);
+      if (target) invoke("navigate", { id: activeId, url: target });
+      else invoke("go_home", { id: activeId });
+      urlInput.blur();
+    }
+    if (e.key === "Escape") urlInput.blur();
+  });
+  urlInput.addEventListener("focus", () => {
+    const cur = tabs.find((t) => t.id === activeId);
+    if (cur) urlInput.value = isHome(cur.url) ? "" : cur.url;
+    urlInput.select();
+  });
+  urlInput.addEventListener("blur", render);
+
+  $("#back").onclick = () => activeId && invoke("go_back", { id: activeId });
+  $("#fwd").onclick = () => activeId && invoke("go_forward", { id: activeId });
+  $("#reload").onclick = () => activeId && invoke("reload", { id: activeId });
+  $("#star").onclick = toggleBookmark;
+  $("#key").onclick = openAutofill;
+  $("#afill").addEventListener("mousedown", (e) => { if (e.target.id === "afill") closeAutofill(); });
+  // Pop-ups (target="_blank", window.open) interceptés côté Rust : ouverts dans un nouvel onglet
+  listen("new-window", ({ payload }) => { if (/^https?:/i.test(payload)) newTab(payload); });
+
+  function toggleBookmark() {
+    const cur = tabs.find((t) => t.id === activeId);
+    if (!cur || !/^https?:/.test(cur.url) || isHome(cur.url)) return;
+    const i = bookmarks.findIndex((b) => b.url === cur.url);
+    if (i >= 0) bookmarks.splice(i, 1);
+    else bookmarks.push({ url: cur.url, title: host(cur.url) });
+    store.set("bookmarks", bookmarks);
+    updateStar();
+    if (panel && panel.kind === "bookmarks") renderPanel();
+  }
+
+  $("#mclose").innerHTML = ICONS.close;
+  $("#mclose").onclick = closeSettings;
+  $("#overlay").addEventListener("mousedown", (e) => { if (e.target.id === "overlay") closeSettings(); });
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && afillOpen) { e.preventDefault(); return closeAutofill(); }
+    if (e.key === "Escape" && settings) { e.preventDefault(); return closeSettings(); }
+    if (!(e.ctrlKey || e.metaKey)) return;
+    if (e.key === ",") { e.preventDefault(); return settings ? closeSettings() : openSettings(); }
+    if (settings || afillOpen) return; // pas de raccourcis d'onglets derrière une fenêtre ouverte
+    if (e.key === "t") { e.preventDefault(); newTab(); }
+    if (e.key === "w") { e.preventDefault(); activeId && closeTab(activeId); }
+    if (e.key === "l") { e.preventDefault(); urlInput.focus(); }
+    if (e.key === "d") { e.preventDefault(); toggleBookmark(); }
+  });
+
+  /* ---------- fenêtre sans barre de titre ---------- */
+  $("#wmin").onclick = () => invoke("win_minimize");
+  $("#wmax").onclick = () => invoke("win_toggle_max");
+  $("#wclose").onclick = () => invoke("win_close");
+  // Glisser la fenêtre depuis la zone vide à côté des onglets
+  const dragZone = (e) => e.target.id === "tabs" || e.target.id === "top";
+  $("#top").addEventListener("mousedown", (e) => { if (e.button === 0 && e.detail === 1 && dragZone(e)) invoke("win_drag"); });
+  $("#top").addEventListener("dblclick", (e) => { if (dragZone(e)) invoke("win_toggle_max"); });
+  // Les changements de réglages faits dans une autre vue (ex. accueil) restent synchronisés
+  window.addEventListener("storage", () => { theme = TX.getTheme(); applyTheme(); });
+
+  /* ---------- démarrage ---------- */
+  applyTheme();
+  renderRail();
+  newTab();
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "bundle": {
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "COLLE_ICI_LA_CLE_PUBLIQUE",
+      "endpoints": [
+        "https://github.com/pepit-ooo/Tweax/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

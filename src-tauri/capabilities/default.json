@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissions de l'interface du navigateur (webview \"ui\" uniquement : ni les onglets ni les pages web n'y ont accès)",
+  "webviews": [
+    "ui"
+  ],
+  "permissions": [
+    "core:default",
+    "updater:default",
+    "process:allow-restart"
+  ]
+}

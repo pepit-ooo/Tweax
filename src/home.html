@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="noir">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tweax</title>
+<script src="shared.js"></script>
+<script>
+  if (/Windows/i.test(navigator.userAgent)) document.documentElement.classList.add("tl");
+  // Affichée dans l'interface (iframe) : l'interface fournit déjà l'Acrylic + la teinte
+  if (window.parent !== window) document.documentElement.classList.add("emb");
+</script>
+<style>
+  :root, [data-theme="noir"] {
+    --bg: #070707; --glow: rgba(255,255,255,.075); --text: #f6f6f6; --muted: rgba(255,255,255,.5);
+    --field: rgba(255,255,255,.07); --field-focus: rgba(255,255,255,.12); --line: rgba(255,255,255,.16);
+    --tile: rgba(255,255,255,.06); --tile-hover: rgba(255,255,255,.14); --logo: none;
+    --tint: transparent;
+  }
+  [data-theme="blanc"] {
+    --sb: rgba(0,0,0,.25); --sb-hover: rgba(0,0,0,.45);
+    --bg: #f5f5f5; --glow: rgba(0,0,0,.05); --text: #0a0a0a; --muted: rgba(0,0,0,.5);
+    --field: rgba(0,0,0,.05); --field-focus: rgba(0,0,0,.09); --line: rgba(0,0,0,.16);
+    --tile: rgba(0,0,0,.05); --tile-hover: rgba(0,0,0,.11); --logo: invert(1);
+    --tint: transparent;
+  }
+  /* Barres de défilement discrètes, assorties au thème */
+  * { scrollbar-width: thin; scrollbar-color: var(--sb, rgba(255,255,255,.22)) transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--sb, rgba(255,255,255,.22)); border-radius: 10px; border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--sb-hover, rgba(255,255,255,.4)); background-clip: content-box; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(70% 55% at 50% 0%, var(--glow), transparent 70%), var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+    display: grid; place-items: center; overflow: hidden;
+  }
+  /* Sous Windows : même teinte translucide que l'interface (index.html), au-dessus de l'Acrylic
+     de la fenêtre. Les webviews sont des surfaces séparées : sans cette teinte, l'accueil
+     paraît plus clair/opaque que le reste du navigateur. */
+  html.tl { --bg-tl: rgba(0,0,0,.22); }
+  html.tl[data-theme="blanc"] { --bg-tl: rgba(255,255,255,.34); }
+  html.tl, html.tl body { background: transparent !important; }
+  html.tl body {
+    background: var(--bg-tl) !important;
+    border: 0; border-radius: 0;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+  }
+  html.tl.emb, html.tl.emb body { background: transparent !important; }
+  main { width: min(640px, 92vw); display: flex; flex-direction: column; align-items: center; margin-top: -4vh; }
+
+  .logo { display: block; width: 42px; height: 42px; padding: 0; margin: 0; background: transparent; border: 0; border-radius: 0; box-shadow: none; filter: var(--logo); opacity: .95; object-fit: contain; }
+  #clock { margin-top: 26px; font-size: clamp(64px, 11vw, 112px); font-weight: 200; letter-spacing: -.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+  #date { margin-top: 10px; color: var(--muted); font-size: 15px; letter-spacing: .01em; }
+
+  form { width: 100%; margin-top: 44px; }
+  .field {
+    display: flex; align-items: center; gap: 12px; height: 54px; padding: 0 20px;
+    border-radius: 27px; background: var(--field); border: 1px solid var(--line);
+    transition: background .15s, border-color .15s;
+  }
+  .field:focus-within { background: var(--field-focus); border-color: var(--text); }
+  .field svg { width: 18px; height: 18px; fill: none; stroke: var(--muted); stroke-width: 1.8; stroke-linecap: round; flex: none; }
+  input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: none; color: var(--text); font: inherit; font-size: 16px; }
+  input::placeholder { color: var(--muted); }
+
+  #tiles { margin-top: 40px; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 14px; }
+  .tile {
+    width: 84px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 4px 10px;
+    border-radius: 16px; text-decoration: none; color: var(--text); transition: background .15s;
+  }
+  .tile:hover { background: var(--tile-hover); }
+  .tile .ic { width: 46px; height: 46px; border-radius: 14px; background: var(--tile); display: grid; place-items: center; overflow: hidden; }
+  .tile img { width: 24px; height: 24px; border-radius: 5px; }
+  .tile .ic b { font-size: 18px; font-weight: 600; }
+  .tile span { max-width: 100%; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <img class="logo" src="logo.png" alt="Tweax">
+  <div id="clock"></div>
+  <div id="date"></div>
+
+  <form id="f">
+    <label class="field">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="q" type="text" autocomplete="off" spellcheck="false" autofocus>
+    </label>
+  </form>
+
+  <nav id="tiles"></nav>
+</main>
+
+<script>
+  const { store } = TX;
+  const $ = (s) => document.querySelector(s);
+
+  function applyTheme() { document.documentElement.dataset.theme = TX.getTheme(); }
+  function applyEngine() { $("#q").placeholder = "Rechercher avec " + TX.engineName() + " ou saisir une adresse"; }
+
+  function tick() {
+    const d = new Date();
+    $("#clock").textContent = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    const date = d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+    $("#date").textContent = date.charAt(0).toUpperCase() + date.slice(1);
+  }
+
+  const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
+
+  function tiles() {
+    const defaults = [
+      { url: "https://fr.wikipedia.org/", title: "Wikipédia" },
+      { url: "https://www.youtube.com/", title: "YouTube" },
+      { url: "https://github.com/", title: "GitHub" },
+      { url: "https://www.reddit.com/", title: "Reddit" },
+    ];
+    const marks = store.get("bookmarks", []);
+    const list = (marks.length ? marks : defaults).slice(0, 8);
+    const nav = $("#tiles");
+    nav.innerHTML = "";
+    for (const m of list) {
+      const a = document.createElement("a");
+      a.className = "tile"; a.href = m.url;
+      const label = m.title || host(m.url);
+      a.innerHTML = `<div class="ic"><img alt=""></div><span></span>`;
+      a.querySelector("span").textContent = label;
+      const img = a.querySelector("img");
+      img.src = `https://icons.duckduckgo.com/ip3/${new URL(m.url).hostname}.ico`;
+      img.onerror = () => { a.querySelector(".ic").innerHTML = `<b>${label[0].toUpperCase()}</b>`; };
+      nav.appendChild(a);
+    }
+  }
+
+  $("#f").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const url = TX.resolve($("#q").value);
+    if (url) go(url);
+  });
+  // Dans l'iframe de l'interface, on demande à l'interface de naviguer dans l'onglet
+  function go(url) {
+    if (window.parent !== window) window.parent.postMessage({ tweaxGo: url }, "*");
+    else location.href = url;
+  }
+  $("#tiles").addEventListener("click", (e) => {
+    const a = e.target.closest("a");
+    if (a) { e.preventDefault(); go(a.href); }
+  });
+
+  // Les réglages changent dans l'interface : la page suit tout de suite
+  window.addEventListener("storage", () => { applyTheme(); applyEngine(); tiles(); });
+
+  applyTheme(); applyEngine(); tick(); tiles();
+  setInterval(tick, 10000);
+</script>
+</body>
+</html>
