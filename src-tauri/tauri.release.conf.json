@@ -1,6 +1,7 @@
 {
   "bundle": {
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": true,
+    "targets": ["nsis"]
   },
   "plugins": {
     "updater": {

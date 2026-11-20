@@ -682,7 +682,7 @@ async fn set_tint(app: AppHandle, dark: bool) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         use tauri::window::{Color, Effect, EffectsBuilder};
-        let color = if dark { Color(0, 0, 0, 24) } else { Color(255, 255, 255, 70) };
+        let color = if dark { Color(0, 0, 0, 24) } else { Color(255, 255, 255, 150) };
         main_window(&app)?
             .set_effects(EffectsBuilder::new().effect(Effect::Acrylic).color(color).build())
             .map_err(|e| e.to_string())?;
