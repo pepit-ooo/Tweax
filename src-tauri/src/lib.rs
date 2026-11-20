@@ -1,4 +1,5 @@
 mod vault;
+mod adblock_native;
 
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -8,7 +9,7 @@ use std::path::{Path, PathBuf};
 use tauri::{State,
     webview::{DownloadEvent, PageLoadEvent, WebviewBuilder},
     window::WindowBuilder,
-    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Url, Webview, WebviewUrl,
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Rect, Url, Webview, WebviewUrl,
     WindowEvent,
 };
 
@@ -27,8 +28,11 @@ static PROFILE: Mutex<String> = Mutex::new(String::new());
 static DL_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 static DL_ASK: AtomicBool = AtomicBool::new(false);
 static CLEAR_ON_EXIT: AtomicBool = AtomicBool::new(false);
+static ACTIVE_TAB: AtomicU32 = AtomicU32::new(0);
+static ACTIVE_PANEL: Mutex<Option<String>> = Mutex::new(None);
 
 const PAGE_JS: &str = include_str!("page.js");
+const ADBLOCK_JS: &str = include_str!("adblock.js");
 
 fn keys_snapshot() -> Vec<String> {
     KEYS.lock().map(|k| k.clone()).unwrap_or_default()
@@ -57,22 +61,22 @@ fn profile_dir(app: &AppHandle) -> Option<PathBuf> {
     Some(dir)
 }
 
-fn clear_data(app: &AppHandle) {
+fn clear_data(app: &AppHandle) -> Result<(), String> {
     for (label, wv) in app.webviews() {
         if label.starts_with("tab-") || label.starts_with("panel-") {
-            let _ = wv.clear_all_browsing_data();
-            break;
+            return wv.clear_all_browsing_data().map_err(|e| e.to_string());
         }
     }
+    Ok(())
 }
 
 fn page_script() -> String {
     let cfg = serde_json::json!({
-        "adblock": ADBLOCK.load(Ordering::SeqCst),
         "keys": keys_snapshot(),
         "allow": allow_snapshot(),
     });
-    format!("window.__TWEAX_CFG = {cfg};\n{PAGE_JS}")
+    let extra = if ADBLOCK.load(Ordering::SeqCst) { ADBLOCK_JS } else { "" };
+    format!("window.__TWEAX_CFG = {cfg};\n{PAGE_JS}{extra}")
 }
 
 fn unique_path(dir: &Path, name: &std::ffi::OsStr) -> PathBuf {
@@ -164,8 +168,10 @@ fn panel_rect(win_h: f64) -> (f64, f64, f64, f64) {
 }
 
 fn place(wv: &Webview, r: (f64, f64, f64, f64)) {
-    let _ = wv.set_position(LogicalPosition::new(r.0, r.1));
-    let _ = wv.set_size(LogicalSize::new(r.2, r.3));
+    let _ = wv.set_bounds(Rect {
+        position: LogicalPosition::new(r.0, r.1).into(),
+        size: LogicalSize::new(r.2, r.3).into(),
+    });
 }
 
 fn window_size(app: &AppHandle) -> Option<(f64, f64)> {
@@ -188,7 +194,27 @@ fn layout(app: &AppHandle) {
     }
 }
 
+fn layout_visible(app: &AppHandle) {
+    let Some((w, h)) = window_size(app) else { return };
+    if let Some(ui) = app.get_webview("ui") {
+        place(&ui, (0.0, 0.0, w, h));
+    }
+    let tab_id = ACTIVE_TAB.load(Ordering::SeqCst);
+    if tab_id != 0 {
+        if let Some(wv) = app.get_webview(&format!("tab-{tab_id}")) {
+            place(&wv, content_rect(w, h));
+        }
+    }
+    let panel = ACTIVE_PANEL.lock().ok().and_then(|p| p.clone());
+    if let Some(label) = panel {
+        if let Some(wv) = app.get_webview(&label) {
+            place(&wv, panel_rect(h));
+        }
+    }
+}
+
 fn hide_all_tabs(app: &AppHandle) {
+    ACTIVE_TAB.store(0, Ordering::SeqCst);
     for (label, wv) in app.webviews() {
         if label.starts_with("tab-") {
             let _ = wv.hide();
@@ -197,6 +223,9 @@ fn hide_all_tabs(app: &AppHandle) {
 }
 
 fn hide_all_panels(app: &AppHandle) {
+    if let Ok(mut p) = ACTIVE_PANEL.lock() {
+        *p = None;
+    }
     for (label, wv) in app.webviews() {
         if label.starts_with("panel-") {
             let _ = wv.hide();
@@ -245,8 +274,13 @@ fn watch_zen_edges(app: AppHandle) {
         let mut sent_enter = false;
         let mut sent_exit = false;
         loop {
-            std::thread::sleep(Duration::from_millis(60));
+            let idle = !ZEN.load(Ordering::SeqCst) && !AUTO_HIDE_ENABLED.load(Ordering::SeqCst);
+            std::thread::sleep(Duration::from_millis(if idle { 400 } else { 60 }));
             let Some(win) = app.get_window("main") else { return };
+            if idle {
+                away_since = None; sent_enter = false; sent_exit = false;
+                continue;
+            }
             let (Ok(cur), Ok(pos), Ok(size)) = (win.cursor_position(), win.inner_position(), win.inner_size()) else { continue };
             let x = cur.x - pos.x as f64;
             let y = cur.y - pos.y as f64;
@@ -296,6 +330,9 @@ async fn new_tab(app: AppHandle, url: Option<String>, private: Option<bool>) -> 
     let popup_handle = app.clone();
     let key_handle = app.clone();
     let dl_handle = app.clone();
+    let current_host: std::sync::Arc<std::sync::Mutex<String>> =
+        std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let host_for_load = current_host.clone();
     let mut builder = WebviewBuilder::new(format!("tab-{id}"), target)
         .initialization_script(page_script())
         .incognito(private)
@@ -363,6 +400,9 @@ async fn new_tab(app: AppHandle, url: Option<String>, private: Option<bool>) -> 
             tauri::webview::Color(255, 255, 255, 255)
         })
         .on_page_load(move |wv, payload| {
+            if let Ok(mut h) = host_for_load.lock() {
+                *h = payload.url().host_str().unwrap_or("").to_lowercase();
+            }
             #[cfg(target_os = "windows")]
             {
                 use tauri::webview::Color;
@@ -394,8 +434,11 @@ async fn new_tab(app: AppHandle, url: Option<String>, private: Option<bool>) -> 
     let wv = window
         .add_child(builder, LogicalPosition::new(x, y), LogicalSize::new(cw, ch))
         .map_err(|e| e.to_string())?;
+    adblock_native::install(&wv, current_host);
     if is_home {
         let _ = wv.hide();
+    } else {
+        ACTIVE_TAB.store(id, Ordering::SeqCst);
     }
 
     Ok(id)
@@ -405,7 +448,11 @@ async fn new_tab(app: AppHandle, url: Option<String>, private: Option<bool>) -> 
 async fn switch_tab(app: AppHandle, id: u32) -> Result<(), String> {
     let wv = tab(&app, id)?;
     hide_all_tabs(&app);
+    if let Some((w, h)) = window_size(&app) {
+        place(&wv, content_rect(w, h));
+    }
     wv.show().map_err(|e| e.to_string())?;
+    ACTIVE_TAB.store(id, Ordering::SeqCst);
     let _ = wv.set_focus();
     Ok(())
 }
@@ -420,7 +467,10 @@ async fn set_adblock(app: AppHandle, enabled: bool, allow: Option<Vec<String>>) 
         .filter(|h| !h.is_empty() && h.len() <= 120 && h.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-'))
         .take(200)
         .collect();
-    let script = format!("window.__tweaxAllow = {};", serde_json::to_string(&list).map_err(|e| e.to_string())?);
+    let script = format!(
+        "window.__tweaxAllow = {};window.__tweaxAdSync && window.__tweaxAdSync();",
+        serde_json::to_string(&list).map_err(|e| e.to_string())?
+    );
     if let Ok(mut a) = ALLOW.lock() {
         *a = list;
     }
@@ -496,12 +546,7 @@ async fn save_text_file(app: AppHandle, name: String, content: String) -> Result
 
 #[tauri::command]
 async fn clear_browsing_data(app: AppHandle) -> Result<(), String> {
-    for (label, wv) in app.webviews() {
-        if label.starts_with("tab-") || label.starts_with("panel-") {
-            return wv.clear_all_browsing_data().map_err(|e| e.to_string());
-        }
-    }
-    Ok(())
+    clear_data(&app)
 }
 
 #[tauri::command]
@@ -608,6 +653,7 @@ async fn hide_tabs_quiet(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 async fn close_tab(app: AppHandle, id: u32) -> Result<(), String> {
+    let _ = ACTIVE_TAB.compare_exchange(id, 0, Ordering::SeqCst, Ordering::SeqCst);
     tab(&app, id)?.close().map_err(|e| e.to_string())
 }
 
@@ -666,7 +712,7 @@ async fn win_toggle_max(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 async fn win_close(app: AppHandle) -> Result<(), String> {
     if CLEAR_ON_EXIT.load(Ordering::SeqCst) {
-        clear_data(&app);
+        let _ = clear_data(&app);
     }
     app.exit(0);
     Ok(())
@@ -726,11 +772,12 @@ async fn set_zen(app: AppHandle, on: bool, auto_hide: Option<bool>) -> Result<()
             let e = 1.0 - (1.0 - t).powi(3);
             RAIL_CUR.store((from_r + (to_r - from_r) * e).to_bits(), Ordering::SeqCst);
             TOP_CUR.store((from_t + (to_t - from_t) * e).to_bits(), Ordering::SeqCst);
-            layout(&app);
             if t >= 1.0 {
+                layout(&app);
                 break;
             }
-            std::thread::sleep(Duration::from_millis(8));
+            layout_visible(&app);
+            std::thread::sleep(Duration::from_millis(12));
         }
     });
     Ok(())
@@ -742,7 +789,7 @@ async fn set_panel(app: AppHandle, open: bool) -> Result<(), String> {
     if !open {
         hide_all_panels(&app);
     }
-    layout(&app);
+    layout_visible(&app);
     Ok(())
 }
 
@@ -754,6 +801,10 @@ async fn show_web_panel(app: AppHandle, key: String, url: String) -> Result<(), 
 
     hide_all_panels(&app);
     PANEL_OPEN.store(true, Ordering::SeqCst);
+
+    if let Ok(mut p) = ACTIVE_PANEL.lock() {
+        *p = Some(label.clone());
+    }
 
     if let Some(wv) = app.get_webview(&label) {
         wv.show().map_err(|e| e.to_string())?;
@@ -773,7 +824,7 @@ async fn show_web_panel(app: AppHandle, key: String, url: String) -> Result<(), 
             )
             .map_err(|e| e.to_string())?;
     }
-    layout(&app);
+    layout_visible(&app);
     Ok(())
 }
 
@@ -785,7 +836,13 @@ async fn hide_web_panels(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 async fn close_web_panel(app: AppHandle, key: String) -> Result<(), String> {
-    if let Some(wv) = app.get_webview(&format!("panel-{key}")) {
+    let label = format!("panel-{key}");
+    if let Ok(mut p) = ACTIVE_PANEL.lock() {
+        if p.as_deref() == Some(label.as_str()) {
+            *p = None;
+        }
+    }
+    if let Some(wv) = app.get_webview(&label) {
         wv.close().map_err(|e| e.to_string())?;
     }
     Ok(())
@@ -975,10 +1032,10 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             match event {
-                WindowEvent::Resized(_) => layout(window.app_handle()),
+                WindowEvent::Resized(_) => layout_visible(window.app_handle()),
                 WindowEvent::CloseRequested { .. } => {
                     if CLEAR_ON_EXIT.load(Ordering::SeqCst) {
-                        clear_data(window.app_handle());
+                        let _ = clear_data(window.app_handle());
                     }
                 }
                 _ => {}

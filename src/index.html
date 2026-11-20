@@ -66,7 +66,6 @@
     position: fixed; left: 0; top: 0; bottom: 0; width: var(--rail); padding: 10px 0;
     display: flex; flex-direction: column; align-items: center; gap: 6px;
     background: var(--glass); border-right: 1px solid var(--line);
-    backdrop-filter: blur(32px) saturate(1.6); -webkit-backdrop-filter: blur(32px) saturate(1.6);
   }
   #rail .sep { width: 26px; height: 1px; background: var(--line); margin: 4px 0; }
   #rail .grow { flex: 1; }
@@ -166,7 +165,7 @@
   #urlwrap {
     flex: 1; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 8px 0 12px; margin: 0 6px;
     border-radius: 12px; background: var(--glass); border: 1px solid var(--line);
-    backdrop-filter: blur(32px) saturate(1.6); -webkit-backdrop-filter: blur(32px) saturate(1.6); transition: border-color .15s, background .15s;
+    transition: border-color .15s, background .15s;
   }
   #urlwrap:focus-within { border-color: var(--accent); background: var(--card); }
   #url { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: none; color: var(--text); font: inherit; font-size: 13.5px; text-align: center; user-select: text; }
@@ -1348,32 +1347,72 @@
   setTimeout(() => { if (TX.store.get("autoCheckUpdates", true)) checkUpdate(); }, 4000);
 
   let lastMode = "";
+  let lazySeq = 0;
+  const tabCache = new WeakMap();
+  const plusBtn = document.createElement("button");
+  plusBtn.className = "ibtn";
+  plusBtn.title = "Nouvel onglet (Ctrl+T)";
+  plusBtn.innerHTML = ICONS.plus;
+  plusBtn.onclick = () => userTab();
+  plusBtn.oncontextmenu = (e) => { e.preventDefault(); openCtx(e.clientX, e.clientY, [["Nouvel onglet", () => userTab()], ["Nouvel onglet privé", () => userTab({ private: true })], ["Rouvrir l’onglet fermé", reopenTab]]); };
+
+  function tabSig(t) {
+    const home = !t.url || isHome(t.url);
+    return [t.id === activeId ? 1 : 0, t.pinned ? 1 : 0, t.private ? 1 : 0, home ? 1 : 0, t.loading ? 1 : 0, home ? "" : host(t.url)].join("|");
+  }
+
+  function buildTab(t) {
+    const el = document.createElement("div");
+    el.className = "tab" + (t.id === activeId ? " active" : "") + (t.pinned ? " pin" : "") + (t.private ? " priv" : "");
+    const home = !t.url || isHome(t.url);
+    const h = home ? (t.private ? "Onglet privé" : "Nouvel onglet") : host(t.url);
+    el.innerHTML = (t.private ? ICONS.mask.replace("<svg", '<svg class="pv"')
+                  : home ? '<img src="logo.png" alt="">'
+                  : t.loading ? '<div class="spin"></div>'
+                  : `<img src="${fav(t.url)}" onerror="this.style.visibility='hidden'">`)
+                 + `<span class="title"></span><button class="x" title="Fermer">${ICONS.close}</button>`;
+    el.querySelector(".title").textContent = h;
+    el.title = h;
+    el.onclick = () => activate(t.id);
+    el.querySelector(".x").onclick = (e) => { e.stopPropagation(); closeTab(t.id); };
+    el.onauxclick = (e) => { if (e.button === 1 && !t.pinned) closeTab(t.id); };
+    el.oncontextmenu = (e) => { e.preventDefault(); openCtx(e.clientX, e.clientY, tabMenu(t)); };
+    return el;
+  }
+
+  function lazyTab(url, pinned) {
+    const t = { id: --lazySeq, url: url || "", loading: false, pinned: !!pinned, private: false, lazy: true, pending: null };
+    if (t.pinned) tabs.splice(tabs.filter((x) => x.pinned).length, 0, t);
+    else tabs.push(t);
+    return t;
+  }
+
+  function materialize(t) {
+    if (!t.lazy) return Promise.resolve(t.id);
+    if (!t.pending) {
+      t.pending = invoke("new_tab", { url: t.url || null, private: false }).then((id) => {
+        const old = t.id;
+        t.id = id; t.lazy = false; t.loading = true; t.pending = null;
+        if (activeId === old) activeId = id;
+        return id;
+      }, (e) => { t.pending = null; throw e; });
+    }
+    return t.pending;
+  }
+
   function render() {
     const wrap = $("#tabs");
-    wrap.innerHTML = "";
+    const ordered = [];
     for (const t of tabs) {
-      const el = document.createElement("div");
-      el.className = "tab" + (t.id === activeId ? " active" : "") + (t.pinned ? " pin" : "") + (t.private ? " priv" : "");
-      const home = !t.url || isHome(t.url);
-      const h = home ? (t.private ? "Onglet privé" : "Nouvel onglet") : host(t.url);
-      el.innerHTML = (t.private ? ICONS.mask.replace("<svg", '<svg class="pv"')
-                    : home ? '<img src="logo.png" alt="">'
-                    : t.loading ? '<div class="spin"></div>'
-                    : `<img src="${fav(t.url)}" onerror="this.style.visibility='hidden'">`)
-                   + `<span class="title"></span><button class="x" title="Fermer">${ICONS.close}</button>`;
-      el.querySelector(".title").textContent = h;
-      el.title = h;
-      el.onclick = () => activate(t.id);
-      el.querySelector(".x").onclick = (e) => { e.stopPropagation(); closeTab(t.id); };
-      el.onauxclick = (e) => { if (e.button === 1 && !t.pinned) closeTab(t.id); };
-      el.oncontextmenu = (e) => { e.preventDefault(); openCtx(e.clientX, e.clientY, tabMenu(t)); };
-      wrap.appendChild(el);
+      const sig = tabSig(t);
+      let rec = tabCache.get(t);
+      if (!rec || rec.sig !== sig) { rec = { el: buildTab(t), sig }; tabCache.set(t, rec); }
+      ordered.push(rec.el);
     }
-    const plus = document.createElement("button");
-    plus.className = "ibtn"; plus.title = "Nouvel onglet (Ctrl+T)"; plus.innerHTML = ICONS.plus;
-    plus.onclick = () => userTab();
-    plus.oncontextmenu = (e) => { e.preventDefault(); openCtx(e.clientX, e.clientY, [["Nouvel onglet", () => userTab()], ["Nouvel onglet privé", () => userTab({ private: true })], ["Rouvrir l’onglet fermé", reopenTab]]); };
-    wrap.appendChild(plus);
+    const kids = wrap.children;
+    let same = kids.length === ordered.length + 1 && kids[ordered.length] === plusBtn;
+    for (let i = 0; same && i < ordered.length; i++) if (kids[i] !== ordered[i]) same = false;
+    if (!same) wrap.replaceChildren(...ordered, plusBtn);
 
     const cur = tabs.find((t) => t.id === activeId);
     if (cur && document.activeElement !== urlInput) urlInput.value = isHome(cur.url) || isBlank(cur.url) ? "" : pretty(cur.url);
@@ -1385,7 +1424,13 @@
     const hf = $("#homeframe");
     if (onHome && hf.getAttribute("src") !== wantHome) hf.setAttribute("src", wantHome);
     const mode = cur ? (onHome ? "h" : "n") + cur.id : "";
-    if (cur && mode !== lastMode) {
+    if (cur && cur.lazy) {
+      lastMode = "";
+      if (!cur.pending && !settings && !afillOpen && overlays.size === 0) {
+        if (!onHome) invoke("hide_tabs_quiet").catch(() => {});
+        materialize(cur).then(() => { lastMode = ""; render(); }).catch(() => {});
+      }
+    } else if (cur && mode !== lastMode) {
       lastMode = mode;
       if (!settings && !afillOpen && overlays.size === 0) invoke(onHome ? "hide_all_tabs_cmd" : "switch_tab", onHome ? {} : { id: cur.id }).catch(() => {});
     }
@@ -1429,7 +1474,7 @@
     const items = [
       [t.pinned ? "Désépingler l’onglet" : "Épingler l’onglet", () => setPinned(t.id, !t.pinned)],
       ["Dupliquer", () => newTab(isHome(t.url) ? undefined : t.url, { private: t.private })],
-      ["Recharger", () => invoke("reload", { id: t.id })],
+      ["Recharger", () => t.lazy || invoke("reload", { id: t.id })],
       null,
       ["Fermer l’onglet", () => closeTab(t.id)],
     ];
@@ -1488,14 +1533,16 @@
   }
 
   async function closeTab(id) {
-    const i = tabs.findIndex((t) => t.id === id);
-    if (i < 0) return;
-    const gone = tabs[i];
+    const gone = tabs.find((t) => t.id === id);
+    if (!gone) return;
     if (!gone.private && !isHome(gone.url)) { closedStack.push({ url: gone.url, pinned: gone.pinned }); if (closedStack.length > 20) closedStack.shift(); }
-    await invoke("close_tab", { id });
+    if (gone.pending) { try { await gone.pending; } catch {} }
+    if (!gone.lazy) await invoke("close_tab", { id: gone.id });
+    const i = tabs.indexOf(gone);
+    if (i < 0) return;
     tabs.splice(i, 1);
     if (tabs.length === 0) return userTab();
-    if (activeId === id) await activate(tabs[Math.min(i, tabs.length - 1)].id);
+    if (activeId === gone.id) await activate(tabs[Math.min(i, tabs.length - 1)].id);
     else render();
   }
 
@@ -1552,12 +1599,13 @@
     const tokens = sugQuery.toLowerCase().split(/\s+/);
     const seen = new Set();
     const found = [];
-    const pool = bookmarks.map((b) => ({ ...b, tag: "Favori" })).concat(history.slice().reverse().map((h) => ({ ...h, tag: "Historique" })));
-    for (const e of pool) {
-      if (seen.has(e.url)) continue;
+    const take = (e, tag) => {
+      if (seen.has(e.url)) return;
       const hay = (e.url + " " + (e.title || "")).toLowerCase();
-      if (tokens.every((t) => hay.includes(t))) { seen.add(e.url); found.push({ kind: "entry", url: e.url, title: e.title || host(e.url), tag: e.tag }); if (found.length >= 6) break; }
-    }
+      if (tokens.every((t) => hay.includes(t))) { seen.add(e.url); found.push({ kind: "entry", url: e.url, title: e.title || host(e.url), tag }); }
+    };
+    for (let i = 0; i < bookmarks.length && found.length < 6; i++) take(bookmarks[i], "Favori");
+    for (let i = history.length - 1; i >= 0 && found.length < 6; i--) take(history[i], "Historique");
     sugItems = [{ kind: "go", url: TX.resolve(sugQuery), title: looksUrl(sugQuery) ? "Aller à " + sugQuery : "Rechercher « " + sugQuery + " » avec " + TX.engineName() }].concat(found);
     sugIdx = -1;
     paintSug();
@@ -1749,14 +1797,16 @@
   async function boot() {
     applyTheme();
     renderRail();
-    await invoke("set_profile", { id: TX.activeProfile() }).catch(() => {});
-    await adblockSync();
-    await syncDownloads();
-    invoke("set_clear_on_exit", { enabled: store.get("clearOnExit", false) }).catch(() => {});
-    await syncShortcuts();
+    await Promise.all([
+      invoke("set_profile", { id: TX.activeProfile() }).catch(() => {}),
+      adblockSync(),
+      syncDownloads(),
+      invoke("set_clear_on_exit", { enabled: store.get("clearOnExit", false) }).catch(() => {}),
+      syncShortcuts(),
+    ]);
     const sess = store.get("session", null);
     if (store.get("restoreSession", true) && sess && Array.isArray(sess.tabs) && sess.tabs.length) {
-      for (const t of sess.tabs) await newTab(t.url || undefined, { pinned: !!t.pinned, quiet: true });
+      for (const t of sess.tabs) lazyTab(t.url, t.pinned);
       const target = tabs[Math.min(sess.active || 0, tabs.length - 1)];
       if (target) activate(target.id);
     } else {

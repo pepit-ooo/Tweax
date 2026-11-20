@@ -14,14 +14,11 @@
   };
   const sendKey = (combo) => {
     const prev = document.title;
-    document.title = "​tweax-key:" + combo + ":" + Date.now();
+    document.title = "\u200btweax-key:" + combo + ":" + Date.now();
     setTimeout(() => { document.title = prev; }, 0);
   };
 
-  const host = document.createElement("div");
-  host.style.cssText = "all:initial;position:fixed;top:0;left:0;width:0;height:0;z-index:2147483647;";
-  const root = host.attachShadow({ mode: "closed" });
-  root.innerHTML = `
+  const TEMPLATE = `
     <style>
       *{box-sizing:border-box;font-family:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
       .find{position:fixed;top:14px;right:18px;display:none;align-items:center;gap:6px;padding:7px 8px 7px 14px;border-radius:14px;background:rgba(24,24,28,.72);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(24px) saturate(1.5);-webkit-backdrop-filter:blur(24px) saturate(1.5);box-shadow:0 12px 40px rgba(0,0,0,.35);color:#fff;font-size:13px}
@@ -76,7 +73,17 @@
       </div>
       <div class="rdwrap" id="rdbody"></div>
     </div>`;
-  const $ = (id) => root.getElementById(id);
+  const host = document.createElement("div");
+  host.style.cssText = "all:initial;position:fixed;top:0;left:0;width:0;height:0;z-index:2147483647;";
+  let root = null;
+  const ensure = () => {
+    if (root) return root;
+    root = host.attachShadow({ mode: "closed" });
+    root.innerHTML = TEMPLATE;
+    wire();
+    return root;
+  };
+  const $ = (id) => ensure().getElementById(id);
   const mount = () => { if (!host.isConnected) (document.documentElement || document).appendChild(host); };
 
   const hlStyle = document.createElement("style");
@@ -84,6 +91,7 @@
   let ranges = [];
   let idx = 0;
   const hasHl = typeof CSS !== "undefined" && CSS.highlights && typeof Highlight !== "undefined";
+  const findOn = () => !!root && $("find").classList.contains("on");
 
   const clearHl = () => {
     ranges = [];
@@ -99,6 +107,7 @@
     if (el && el.scrollIntoView) el.scrollIntoView({ block: "center", inline: "nearest" });
     $("cnt").textContent = (idx + 1) + "/" + ranges.length;
   };
+  const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA"]);
   const search = (q) => {
     clearHl();
     if (!q || !hasHl) return;
@@ -107,8 +116,7 @@
       acceptNode(n) {
         const p = n.parentElement;
         if (!p) return NodeFilter.FILTER_REJECT;
-        const t = p.tagName;
-        if (t === "SCRIPT" || t === "STYLE" || t === "NOSCRIPT" || t === "TEXTAREA") return NodeFilter.FILTER_REJECT;
+        if (SKIP_TAGS.has(p.tagName)) return NodeFilter.FILTER_REJECT;
         if (host.contains(n)) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
       },
@@ -148,15 +156,6 @@
     $("find").classList.remove("on");
     clearHl();
   };
-  $("q").addEventListener("input", (e) => search(e.target.value));
-  $("q").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
-    if (e.key === "Escape") { e.preventDefault(); closeFind(); }
-    e.stopPropagation();
-  });
-  $("prev").onclick = () => step(-1);
-  $("next").onclick = () => step(1);
-  $("close").onclick = closeFind;
   window.__tweaxFind = { open: openFind, close: closeFind };
 
   let toastTimer = 0;
@@ -172,7 +171,6 @@
   const RD_KEY = "__tweax_reader";
   const RD_THEMES = ["clair", "sepia", "sombre"];
   const rdPrefs = { size: 19, theme: "clair" };
-  try { Object.assign(rdPrefs, JSON.parse(localStorage.getItem(RD_KEY) || "{}")); } catch (_) {}
   const rdSave = () => { try { localStorage.setItem(RD_KEY, JSON.stringify(rdPrefs)); } catch (_) {} };
   const rdApply = () => {
     if (!RD_THEMES.includes(rdPrefs.theme)) rdPrefs.theme = "clair";
@@ -272,12 +270,26 @@
     document.documentElement.style.overflow = prev || "";
     delete document.documentElement.dataset.tweaxRd;
   };
-  const rdIsOpen = () => $("rd").classList.contains("on");
-  $("rdx").onclick = rdClose;
-  $("rdm").onclick = () => { rdPrefs.size -= 1; rdApply(); rdSave(); };
-  $("rdp").onclick = () => { rdPrefs.size += 1; rdApply(); rdSave(); };
-  $("rdt").onclick = () => { rdPrefs.theme = RD_THEMES[(RD_THEMES.indexOf(rdPrefs.theme) + 1) % RD_THEMES.length]; rdApply(); rdSave(); };
+  const rdIsOpen = () => !!root && $("rd").classList.contains("on");
+
   window.__tweaxReader = { toggle: () => (rdIsOpen() ? rdClose() : rdOpen()) };
+
+  const wire = () => {
+    try { Object.assign(rdPrefs, JSON.parse(localStorage.getItem(RD_KEY) || "{}")); } catch (_) {}
+    $("q").addEventListener("input", (e) => search(e.target.value));
+    $("q").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
+      if (e.key === "Escape") { e.preventDefault(); closeFind(); }
+      e.stopPropagation();
+    });
+    $("prev").onclick = () => step(-1);
+    $("next").onclick = () => step(1);
+    $("close").onclick = closeFind;
+    $("rdx").onclick = rdClose;
+    $("rdm").onclick = () => { rdPrefs.size -= 1; rdApply(); rdSave(); };
+    $("rdp").onclick = () => { rdPrefs.size += 1; rdApply(); rdSave(); };
+    $("rdt").onclick = () => { rdPrefs.theme = RD_THEMES[(RD_THEMES.indexOf(rdPrefs.theme) + 1) % RD_THEMES.length]; rdApply(); rdSave(); };
+  };
 
   const ZKEY = "__tweax_zoom";
   let zoom = 1;
@@ -295,19 +307,34 @@
   applyZoom();
   document.addEventListener("readystatechange", applyZoom);
   document.addEventListener("DOMContentLoaded", applyZoom);
-  window.addEventListener("wheel", (e) => {
+
+  const onWheel = (e) => {
     if (!e.ctrlKey) return;
     e.preventDefault();
     setZoom(zoom + (e.deltaY < 0 ? 0.1 : -0.1));
-  }, { passive: false, capture: true });
+  };
+  let wheelArmed = false;
+  const armWheel = () => {
+    if (wheelArmed) return;
+    wheelArmed = true;
+    window.addEventListener("wheel", onWheel, { passive: false, capture: true });
+  };
+  const disarmWheel = () => {
+    if (!wheelArmed) return;
+    wheelArmed = false;
+    window.removeEventListener("wheel", onWheel, { capture: true });
+  };
+  window.addEventListener("keyup", (e) => { if (!e.ctrlKey && !e.metaKey) disarmWheel(); }, true);
+  window.addEventListener("blur", disarmWheel);
 
   window.addEventListener("keydown", (e) => {
     if (e.ctrlKey || e.metaKey) {
+      armWheel();
       if (e.key === "+" || e.key === "=") { e.preventDefault(); return setZoom(zoom + 0.1); }
       if (e.key === "-" || e.key === "_") { e.preventDefault(); return setZoom(zoom - 0.1); }
       if (e.key === "0") { e.preventDefault(); return setZoom(1); }
     }
-    if (e.key === "Escape" && $("find").classList.contains("on")) { closeFind(); return; }
+    if (e.key === "Escape" && findOn()) { closeFind(); return; }
     if (e.key === "Escape" && rdIsOpen()) { e.preventDefault(); rdClose(); return; }
     const combo = norm(e);
     if (!combo) return;
@@ -318,65 +345,4 @@
       sendKey(combo);
     }
   }, true);
-
-  if (cfg.adblock) {
-    const BLOCK = ["doubleclick.net", "googlesyndication.com", "googleadservices.com", "google-analytics.com", "adservice.google.com", "adnxs.com", "adsrvr.org", "taboola.com", "outbrain.com", "criteo.com", "criteo.net", "rubiconproject.com", "pubmatic.com", "openx.net", "casalemedia.com", "amazon-adsystem.com", "scorecardresearch.com", "quantserve.com", "moatads.com", "adsafeprotected.com", "advertising.com", "2mdn.net", "yieldmo.com", "smartadserver.com", "teads.tv", "media.net", "bidswitch.net", "contextweb.com", "lijit.com", "sharethrough.com", "indexww.com", "zedo.com", "serving-sys.com", "hotjar.com", "mouseflow.com", "krxd.net", "demdex.net", "bluekai.com", "adform.net", "mathtag.com", "rlcdn.com", "tapad.com", "33across.com", "sitescout.com", "exelator.com", "everesttech.net", "adcolony.com", "adroll.com", "popads.net", "propellerads.com", "exoclick.com", "juicyads.com", "trafficjunky.net", "revcontent.com", "mgid.com", "ads.yahoo.com", "adtechus.com", "pagead2.googlesyndication.com", "fundingchoicesmessages.google.com"];
-    const allowed = () => {
-      const list = window.__tweaxAllow || cfg.allow || [];
-      const h = location.hostname;
-      return list.some((d) => h === d || h.endsWith("." + d));
-    };
-    const isBlocked = (u) => {
-      if (allowed()) return false;
-      try {
-        const h = new URL(u, location.href).hostname;
-        return BLOCK.some((d) => h === d || h.endsWith("." + d));
-      } catch (_) { return false; }
-    };
-    const origFetch = window.fetch;
-    if (origFetch) window.fetch = function (input, init) {
-      const u = typeof input === "string" ? input : input && input.url;
-      if (u && isBlocked(u)) return Promise.reject(new TypeError("blocked"));
-      return origFetch.apply(this, arguments);
-    };
-    const xo = XMLHttpRequest.prototype.open;
-    const xs = XMLHttpRequest.prototype.send;
-    XMLHttpRequest.prototype.open = function (m, u) {
-      this.__tw = isBlocked(String(u));
-      return xo.apply(this, arguments);
-    };
-    XMLHttpRequest.prototype.send = function () {
-      if (this.__tw) { try { this.abort(); } catch (_) {} return; }
-      return xs.apply(this, arguments);
-    };
-    if (navigator.sendBeacon) {
-      const sb = navigator.sendBeacon.bind(navigator);
-      navigator.sendBeacon = (u, d) => (isBlocked(String(u)) ? true : sb(u, d));
-    }
-    for (const C of [HTMLScriptElement, HTMLImageElement, HTMLIFrameElement]) {
-      const d = Object.getOwnPropertyDescriptor(C.prototype, "src");
-      if (d && d.set) Object.defineProperty(C.prototype, "src", {
-        get: d.get,
-        set(v) { if (isBlocked(String(v))) return; d.set.call(this, v); },
-        configurable: true,
-      });
-    }
-    const sa = Element.prototype.setAttribute;
-    Element.prototype.setAttribute = function (n, v) {
-      if ((n === "src" || n === "href") && /^(SCRIPT|IMG|IFRAME|LINK)$/.test(this.tagName) && isBlocked(String(v))) return;
-      return sa.apply(this, arguments);
-    };
-    const sweep = (n) => {
-      if (n.nodeType !== 1) return;
-      const list = n.matches && n.matches("script[src],iframe[src],img[src]") ? [n] : [];
-      if (n.querySelectorAll) list.push(...n.querySelectorAll("script[src],iframe[src],img[src]"));
-      for (const el of list) if (isBlocked(el.src)) el.remove();
-    };
-    new MutationObserver((ms) => { for (const m of ms) m.addedNodes.forEach(sweep); })
-      .observe(document, { childList: true, subtree: true });
-    const css = document.createElement("style");
-    css.textContent = "ins.adsbygoogle,.adsbygoogle,[id^='google_ads'],[id^='div-gpt-ad'],iframe[src*='doubleclick.net'],iframe[src*='googlesyndication.com'],.ad-banner,.ad-container,.advert,.ads-container,[aria-label='Advertisement'],[data-ad-slot]{display:none!important}";
-    const addCss = () => { if (!allowed()) (document.head || document.documentElement).appendChild(css); };
-    if (document.documentElement) addCss(); else document.addEventListener("DOMContentLoaded", addCss);
-  }
 })();

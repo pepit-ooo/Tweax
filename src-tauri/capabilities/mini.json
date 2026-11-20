@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "mini",
+  "description": "Lecteur de musique détaché",
+  "windows": [
+    "mini"
+  ],
+  "permissions": [
+    "core:event:default"
+  ]
+}
