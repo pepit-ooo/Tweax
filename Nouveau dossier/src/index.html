@@ -1,0 +1,1820 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tweax</title>
+<script>if (/Windows/i.test(navigator.userAgent)) document.documentElement.classList.add("tl");</script>
+<style>
+  :root, [data-theme="noir"] {
+    --bg: #0a0a0a; --bg-tl: rgba(0,0,0,.05);
+    --text: #f6f6f6; --muted: rgba(255,255,255,.55); --glass: rgba(255,255,255,.035);
+    --glass2: rgba(255,255,255,.10); --hover: rgba(255,255,255,.08); --line: rgba(255,255,255,.12);
+    --accent: #ffffff; --onaccent: #000000; --card: rgba(14,14,14,.46);
+    --modal: rgba(24,24,24,.40); --sheet: rgba(20,20,22,.84); --scrim: rgba(0,0,0,.30);
+  }
+  [data-theme="blanc"] {
+    --sb: rgba(0,0,0,.25); --sb-hover: rgba(0,0,0,.45);
+    --bg: #ffffff; --bg-tl: rgba(255,255,255,.42);
+    --text: #111111; --muted: rgba(0,0,0,.62); --glass: rgba(255,255,255,.18);
+    --glass2: rgba(255,255,255,.30); --hover: rgba(255,255,255,.35); --line: rgba(255,255,255,.45);
+    --accent: #000000; --onaccent: #ffffff; --card: rgba(255,255,255,.42);
+    --modal: rgba(255,255,255,.5); --sheet: rgba(255,255,255,.9); --scrim: rgba(255,255,255,.12);
+  }
+  html.tl { background: transparent !important; }
+  html.tl body { background: var(--bg-tl) !important; }
+  #homeframe { display: none; position: fixed; left: var(--rail); top: var(--top); width: calc(100vw - var(--rail)); height: calc(100vh - var(--top)); border: 0; background: transparent; z-index: 1; color-scheme: normal; }
+  body.home-ui #homeframe { display: block; }
+  body.panel-open #homeframe { left: calc(var(--rail) + var(--panel)); width: calc(100vw - var(--rail) - var(--panel)); }
+  body.zen #homeframe { left: 0; top: 0; width: 100vw; height: 100vh; }
+  [data-theme="blanc"] img[src="logo.png"] { filter: invert(1); }
+  [data-theme="blanc"] #modal,
+  [data-theme="blanc"] #afbox {
+    background: var(--sheet);
+    border-color: rgba(255,255,255,.7);
+    box-shadow: 0 24px 70px rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.95);
+  }
+  [data-theme="blanc"] #mnav { background: rgba(255,255,255,.24); border-right-color: rgba(0,0,0,.07); }
+  [data-theme="blanc"] .glass { background: rgba(255,255,255,.16); border-color: rgba(255,255,255,.45); }
+  [data-theme="blanc"] .nv.on { background: rgba(0,0,0,.075); }
+
+  * { scrollbar-width: thin; scrollbar-color: var(--sb, rgba(255,255,255,.22)) transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--sb, rgba(255,255,255,.22)); border-radius: 10px; border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--sb-hover, rgba(255,255,255,.4)); background-clip: content-box; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; overflow: hidden; user-select: none; -webkit-user-select: none; }
+  input, textarea, [contenteditable] { user-select: text; -webkit-user-select: text; }
+  *:focus, *:focus-visible { outline: none; }
+  img, a, svg { -webkit-user-drag: none; user-drag: none; }
+  button, .tab, .ri, .sg, .dl, .nv, .opt, .upd-row, #ctx button { -webkit-tap-highlight-color: transparent; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 13px system-ui, -apple-system, "Segoe UI", sans-serif;
+    --rail: 58px; --top: 94px; --pad: 8px; --panel: 380px;
+  }
+  button { font: inherit; color: inherit; }
+  svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .glass { background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(32px) saturate(1.6); -webkit-backdrop-filter: blur(32px) saturate(1.6); }
+  .ibtn { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: none; color: var(--text); cursor: pointer; transition: background .15s; }
+  .ibtn:hover { background: var(--hover); }
+  #zen { margin-left: 4px; }
+  .ibtn.on { color: var(--accent); }
+
+  #rail {
+    position: fixed; left: 0; top: 0; bottom: 0; width: var(--rail); padding: 10px 0;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    background: var(--glass); border-right: 1px solid var(--line);
+  }
+  #rail .sep { width: 26px; height: 1px; background: var(--line); margin: 4px 0; }
+  #rail .grow { flex: 1; }
+  .ri { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 12px; background: none; cursor: pointer; color: var(--text); transition: background .15s, transform .15s; }
+  .ri:hover { background: var(--hover); }
+  .ri.active { background: var(--glass2); }
+  .ri.has-upd::after { content: ""; position: absolute; top: 7px; right: 7px; width: 9px; height: 9px; border-radius: 50%; background: #3b82f6; box-shadow: 0 0 0 2px var(--bg-tl, transparent); }
+  .upd-card { padding: 18px; border-radius: 14px; border: 1px solid var(--line); background: var(--glass); display: flex; flex-direction: column; gap: 14px; margin-bottom: 12px; }
+  .upd-head { display: flex; align-items: center; gap: 14px; }
+  .upd-logo { width: 44px; height: 44px; border-radius: 12px; background: var(--glass2); display: grid; place-items: center; flex: none; }
+  .upd-logo img { width: 24px; height: 24px; object-fit: contain; }
+  .upd-id { flex: 1; min-width: 0; }
+  .upd-id b { display: block; font-size: 15px; font-weight: 600; }
+  .upd-id span { color: var(--muted); font-size: 12.5px; }
+  .upd-status { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+  .upd-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--muted); }
+  .upd-dot.ok { background: #34c759; } .upd-dot.new { background: #3b82f6; } .upd-dot.bad { background: #ff453a; }
+  .upd-dot.busy { background: none; border: 2px solid var(--muted); border-top-color: transparent; animation: updspin .8s linear infinite; }
+  @keyframes updspin { to { transform: rotate(360deg); } }
+  .upd-notes { color: var(--muted); font-size: 12.5px; white-space: pre-wrap; max-height: 120px; overflow: auto; padding: 10px 12px; border-radius: 10px; background: var(--glass); }
+  .upd-err { color: var(--muted); font-size: 12px; word-break: break-word; }
+  .upd-bar { height: 6px; border-radius: 6px; background: var(--glass2); overflow: hidden; }
+  .upd-bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+  .upd-row { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--line); background: var(--glass); cursor: pointer; }
+  .upd-row .t { flex: 1; font-weight: 500; }
+  .tab.pin { flex: none; width: 38px; min-width: 38px; padding: 0; justify-content: center; }
+  .tab.pin .title, .tab.pin .x { display: none; }
+  .tab.priv { background: rgba(120, 90, 255, .14); }
+  .tab.priv.active { background: rgba(120, 90, 255, .26); border-color: rgba(150, 120, 255, .55); }
+  .tab.priv svg.pv { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  #ctx { display: none; position: fixed; z-index: 480; min-width: 210px; padding: 6px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); backdrop-filter: blur(32px) saturate(1.6); -webkit-backdrop-filter: blur(32px) saturate(1.6); box-shadow: 0 18px 50px rgba(0,0,0,.35); }
+  #ctx.open { display: block; }
+  #ctx button { display: flex; width: 100%; align-items: center; gap: 10px; height: 34px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--text); cursor: pointer; text-align: left; }
+  #ctx button:hover { background: var(--hover); }
+  #ctx hr { border: 0; height: 1px; background: var(--line); margin: 5px 4px; }
+  #sug { display: none; position: fixed; z-index: 470; padding: 6px; max-height: 360px; overflow: auto; border-radius: 14px; background: var(--card); border: 1px solid var(--line); backdrop-filter: blur(32px) saturate(1.6); -webkit-backdrop-filter: blur(32px) saturate(1.6); box-shadow: 0 18px 50px rgba(0,0,0,.35); }
+  #sug.open { display: block; }
+  .sg { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; cursor: default; }
+  .sg.on, .sg:hover { background: var(--hover); }
+  .sg img { width: 16px; height: 16px; border-radius: 4px; flex: none; }
+  .sg .ico { width: 16px; height: 16px; flex: none; display: grid; place-items: center; color: var(--muted); }
+  .sg .ico svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .sg .t { flex: 1; min-width: 0; }
+  .sg .t b { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sg .t small { display: block; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sg .k { color: var(--muted); font-size: 11px; flex: none; }
+  .ri.dl-busy::after { content: ""; position: absolute; top: 7px; right: 7px; width: 9px; height: 9px; border-radius: 50%; background: #3b82f6; }
+  .dl { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px; }
+  .dl:hover { background: var(--hover); }
+  .dl .t { flex: 1; min-width: 0; }
+  .dl .t b { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dl .t small { color: var(--muted); }
+  .dl .acts { display: flex; gap: 2px; }
+  .dl .acts button { height: 28px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--glass); cursor: pointer; }
+  .dl .acts button:hover { background: var(--hover); }
+  .kbrow { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .kbrow .l { flex: 1; }
+  .kbrow button { height: 28px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--glass); cursor: pointer; }
+  .kbrow button:hover { background: var(--hover); }
+  .kbrow kbd.rec { border-color: var(--accent); }
+  .stack { display: flex; flex-direction: column; gap: 10px; }
+  .hint2 { color: var(--muted); font-size: 12.5px; margin-top: -4px; }
+  .upd-row .sub { display: block; color: var(--muted); font-size: 12px; font-weight: 400; margin-top: 2px; }
+  .sw { width: 38px; height: 22px; border-radius: 22px; background: var(--glass2); border: 1px solid var(--line); position: relative; flex: none; transition: background .15s; }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
+  .sw.on { background: var(--accent); }
+  .sw.on::after { transform: translateX(16px); background: var(--onaccent); }
+  .ri.active::before { content: ""; position: absolute; left: -9px; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+  .ri img { width: 22px; height: 22px; border-radius: 6px; }
+  .ri .ph { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; background: var(--accent); color: var(--onaccent); font-weight: 700; font-size: 12px; }
+
+  #top { position: fixed; left: var(--rail); right: 0; top: 0; height: var(--top); padding: 0 12px 0 var(--pad); border-bottom: 1px solid var(--line); }
+  :root { --ease: cubic-bezier(.22, .61, .36, 1); }
+  #rail { transition: transform .24s var(--ease); }
+  #top { transition: transform .24s var(--ease); }
+  #wc { transition: transform .24s var(--ease); }
+  body.zen #rail { transform: translateX(-100%); }
+  body.zen #top, body.zen #wc { transform: translateY(-100%); }
+  #tabs { display: flex; align-items: center; gap: 4px; height: 46px; padding-top: 6px; }
+  .tab {
+    display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 6px 0 10px;
+    flex: 0 1 200px; min-width: 56px; max-width: 200px; border-radius: 10px;
+    border: 1px solid transparent; color: var(--muted); cursor: default; transition: background .15s;
+  }
+  .tab:hover { background: var(--hover); }
+  .tab.active { background: var(--glass2); color: var(--text); border-color: var(--line); box-shadow: 0 2px 10px rgba(0,0,0,.18); }
+  .tab img { width: 15px; height: 15px; border-radius: 4px; flex: none; }
+  .tab .title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tab .x { display: grid; place-items: center; width: 20px; height: 20px; border: 0; border-radius: 6px; background: none; color: inherit; cursor: pointer; opacity: 0; }
+  .tab:hover .x, .tab.active .x { opacity: .8; }
+  .tab .x:hover { background: var(--hover); opacity: 1; }
+  .tab .x svg { width: 12px; height: 12px; }
+  .spin { width: 14px; height: 14px; flex: none; border: 2px solid var(--muted); border-top-color: transparent; border-radius: 50%; animation: r .7s linear infinite; }
+  @keyframes r { to { transform: rotate(360deg); } }
+
+  #bar { display: flex; align-items: center; gap: 4px; height: 48px; }
+  #urlwrap {
+    flex: 1; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 8px 0 12px; margin: 0 6px;
+    border-radius: 12px; background: var(--glass); border: 1px solid var(--line);
+    transition: border-color .15s, background .15s;
+  }
+  #urlwrap:focus-within { border-color: var(--accent); background: var(--card); }
+  #url { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: none; color: var(--text); font: inherit; font-size: 13.5px; text-align: center; user-select: text; }
+  #url:focus { text-align: left; }
+  #url::placeholder { color: var(--muted); }
+  #lock { color: var(--muted); }
+  #lock svg { width: 15px; height: 15px; }
+
+  #panel {
+    display: none; position: fixed; left: var(--rail); top: var(--top); bottom: 0;
+    width: var(--panel); overflow: hidden;
+    background: var(--card); border-right: 1px solid var(--line);
+  }
+  body.panel-open #panel { display: flex; flex-direction: column; }
+  #panel h2 { font-size: 15px; font-weight: 600; padding: 16px 16px 8px; }
+  #panel h3 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 16px 16px 6px; font-weight: 600; }
+  #pbody { flex: 1; overflow-y: auto; padding: 0 8px 12px; }
+  .item { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; cursor: pointer; }
+  .item:hover { background: var(--hover); }
+  .item img { width: 16px; height: 16px; border-radius: 4px; flex: none; }
+  .item .t { flex: 1; min-width: 0; }
+  .item .t b { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .t small { display: block; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .empty { color: var(--muted); padding: 24px 16px; text-align: center; line-height: 1.5; }
+  .form { display: grid; gap: 8px; padding: 4px 8px; }
+  .form input { height: 34px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--glass); color: var(--text); font: inherit; outline: 0; user-select: text; }
+  .form input:focus { border-color: var(--accent); }
+  .form button { height: 34px; border: 0; border-radius: 10px; background: var(--accent); color: var(--onaccent); font-weight: 600; cursor: pointer; }
+
+  #tabs { padding-right: 150px; }
+  #wc { position: fixed; top: 0; right: 0; height: 40px; display: flex; }
+  #wc button { width: 46px; height: 40px; border: 0; background: none; color: var(--text); display: grid; place-items: center; cursor: pointer; transition: background .12s, color .12s; }
+  #wc button:hover { background: var(--hover); }
+  #wc button.close:hover { background: var(--accent); color: var(--onaccent); }
+  #wc svg { width: 13px; height: 13px; stroke-width: 1.5; }
+  .ri.logo img { width: 26px; height: 26px; border-radius: 0; }
+
+  #wc { z-index: 600; }
+
+  #overlay, #afill { position: fixed; inset: 0; z-index: 500; display: none; place-items: center; background: var(--scrim); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+  #overlay.open, #afill.open { display: grid; animation: fade .16s ease; }
+  @keyframes fade { from { opacity: 0; } }
+  @keyframes pop { from { opacity: 0; transform: translateY(10px) scale(.97); } }
+  #modal { display: flex; width: min(800px, 92vw); height: min(620px, 90vh); border-radius: 18px; overflow: hidden; background: var(--sheet); border: 1px solid var(--line); backdrop-filter: blur(34px) saturate(1.4); -webkit-backdrop-filter: blur(34px) saturate(1.4); box-shadow: 0 30px 80px rgba(0,0,0,.45); animation: pop .22s cubic-bezier(.2,.9,.3,1.1); }
+  #mnav { width: 212px; flex: none; padding: 18px 10px; display: flex; flex-direction: column; gap: 2px; background: var(--glass); border-right: 1px solid var(--line); }
+  #mnav { overflow-y: auto; }
+  .ngrp { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 14px 10px 4px; }
+  .ngrp:first-of-type { padding-top: 0; }
+  .btn:disabled, .form button:disabled { opacity: .45; cursor: default; }
+  .swatches { display: flex; flex-wrap: wrap; gap: 12px; padding: 4px 2px; }
+  .swc { width: 30px; height: 30px; padding: 0; border-radius: 50%; border: 2px solid var(--line); cursor: pointer; transition: transform .12s, border-color .15s; }
+  .swc:hover { transform: scale(1.08); }
+  .swc.sel { border-color: var(--text); }
+  .mini { height: 28px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--glass); color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; flex: none; }
+  .mini:hover { background: var(--hover); }
+  .form.row2 { grid-template-columns: 1fr auto; }
+  .form.row2.two { grid-template-columns: 1fr 1fr; }
+  #mnav h1 { font-size: 15px; font-weight: 650; padding: 2px 10px 14px; }
+  .nv { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; border: 0; border-radius: 10px; background: none; color: var(--muted); cursor: pointer; text-align: left; transition: background .15s, color .15s; }
+  .nv:hover { background: var(--hover); color: var(--text); }
+  .nv.on { background: var(--glass2); color: var(--text); }
+  #mmain { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  #mhead { display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 4px 26px; }
+  #mhead h2 { font-size: 19px; font-weight: 600; }
+  #mbody { flex: 1; overflow-y: auto; padding: 6px 26px 26px; }
+  .hint { color: var(--muted); line-height: 1.5; margin: 0 0 14px; }
+  .grp { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 18px 0 8px; }
+  .grp:first-child { margin-top: 4px; }
+
+  .thm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .thm { padding: 8px; border-radius: 14px; border: 2px solid var(--line); background: none; color: var(--text); cursor: pointer; text-align: left; transition: border-color .15s, background .15s; }
+  .thm:hover { background: var(--hover); }
+  .thm.sel { border-color: var(--accent); }
+  .pv { position: relative; height: 96px; border-radius: 9px; overflow: hidden; }
+  .pv.noir { background: #121212; } .pv.blanc { background: #efefef; }
+  .pv::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 14%; background: rgba(127,127,127,.22); }
+  .pv::after { content: ""; position: absolute; left: 20%; right: 6%; top: 26%; bottom: 10%; border-radius: 6px; background: rgba(127,127,127,.24); }
+  .pv i { position: absolute; left: 20%; right: 6%; top: 8%; height: 11%; border-radius: 4px; background: rgba(127,127,127,.3); }
+  .thm .row { display: flex; align-items: center; justify-content: space-between; padding: 8px 4px 2px; font-weight: 500; }
+  .ck { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--muted); }
+  .sel > .row .ck, .opt.sel .ck { border-color: var(--accent); background: radial-gradient(var(--accent) 0 38%, transparent 44%); }
+
+  .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .opt { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px; border-radius: 11px; border: 1px solid var(--line); background: var(--glass); cursor: pointer; transition: background .15s; }
+  .opt:hover { background: var(--hover); }
+  .opt.sel { border-color: var(--accent); }
+  .opt img { width: 16px; height: 16px; border-radius: 4px; flex: none; }
+  .opt .n { flex: 1; font-weight: 500; }
+
+  .form { display: grid; gap: 8px; margin-top: 10px; }
+  .form.row { grid-template-columns: 1fr 1.4fr auto; }
+  .form input { height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--glass); color: var(--text); font: inherit; outline: 0; user-select: text; min-width: 0; }
+  .form input:focus { border-color: var(--accent); }
+  .form button, .btn { height: 36px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--accent); color: var(--onaccent); font-weight: 600; cursor: pointer; }
+  .kb { display: flex; align-items: center; justify-content: space-between; height: 42px; padding: 0 4px; border-bottom: 1px solid var(--line); }
+  .kb:last-child { border-bottom: 0; }
+  .pw-bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .pw-bar input { flex: 1; min-width: 0; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--glass); color: var(--text); font: inherit; outline: 0; user-select: text; }
+  .pw-bar input:focus { border-color: var(--accent); }
+  .btn.ghost { background: var(--glass2); color: var(--text); }
+  .banner { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--glass); line-height: 1.45; margin: 10px 0; }
+  .err { color: var(--text); font-weight: 600; margin-top: 8px; min-height: 1.2em; }
+  .pw-row { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-bottom: 1px solid var(--line); }
+  .pw-row .t { flex: 1; min-width: 0; }
+  .pw-row .t b { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pw-row .t small { display: block; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text; }
+  .pw-row .ph { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: var(--glass2); font-weight: 700; font-size: 12px; flex: none; }
+  .pw-row .ibtn { width: 30px; height: 30px; }
+  .pw-row .ibtn svg { width: 16px; height: 16px; }
+  .pw-row .ibtn.danger { width: auto; padding: 0 8px; font-weight: 600; }
+  #afbox { width: min(380px, 92vw); max-height: 80vh; overflow-y: auto; padding: 18px; border-radius: 18px; background: var(--sheet); border: 1px solid var(--line); backdrop-filter: blur(34px) saturate(1.4); -webkit-backdrop-filter: blur(34px) saturate(1.4); box-shadow: 0 30px 80px rgba(0,0,0,.45); animation: pop .22s cubic-bezier(.2,.9,.3,1.1); }
+  #afbox h2 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  #afbox .pw-row { cursor: pointer; border-radius: 10px; border-bottom: 0; }
+  #afbox .pw-row:hover { background: var(--hover); }
+  #key.on { color: var(--accent); background: var(--glass2); }
+  .chips { display: flex; gap: 4px; }
+  .chip.bad { color: var(--text); border-color: var(--accent); }
+  .chip { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); flex: none; }
+  .chip.new { color: var(--text); border-color: var(--accent); }
+  .chk { display: flex; align-items: center; gap: 8px; margin: 8px 0; cursor: pointer; }
+  .chk input { width: 16px; height: 16px; accent-color: var(--accent); }
+  kbd { font: 12px ui-monospace, Consolas, monospace; padding: 3px 8px; border-radius: 7px; border: 1px solid var(--line); background: var(--glass); }
+</style>
+</head>
+<body>
+<iframe id="homeframe" src="home.html" allowtransparency="true" tabindex="-1"></iframe>
+  
+  <nav id="rail"></nav>
+
+  <header id="top">
+    <div id="tabs"></div>
+    <div id="bar">
+      <button class="ibtn" id="back" title="Retour"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+      <button class="ibtn" id="fwd" title="Avancer"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+      <button class="ibtn" id="reload" title="Recharger"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+      <div id="urlwrap">
+        <span id="lock"><svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>
+        <input id="url" type="text" spellcheck="false" placeholder="Rechercher ou saisir une adresse">
+      </div>
+      <button class="ibtn" id="key" title="Mots de passe"><svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/></svg></button>
+      <button class="ibtn" id="reader" title="Mode lecture (Alt+R)"><svg viewBox="0 0 24 24"><path d="M3 5h6a3 3 0 0 1 3 3v12a2 2 0 0 0-2-2H3zM21 5h-6a3 3 0 0 0-3 3v12a2 2 0 0 1 2-2h7z"/></svg></button>
+      <button class="ibtn" id="star" title="Ajouter aux favoris (Ctrl+D)"><svg viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></button>
+      <button class="ibtn" id="zen" title="Activer / désactiver la page agrandie"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    </div>
+  </header>
+
+  <div id="wc">
+    <button id="wmin" title="Réduire"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+    <button id="wmax" title="Agrandir"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1"/></svg></button>
+    <button id="wclose" class="close" title="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+
+  <div id="ctx"></div>
+  <div id="sug"></div>
+
+  <aside id="panel"><div id="pbody"></div></aside>
+
+  <div id="afill"><div id="afbox" role="dialog" aria-modal="true" aria-label="Mots de passe"></div></div>
+
+  <div id="overlay">
+    <div id="modal" role="dialog" aria-modal="true" aria-label="Réglages">
+      <nav id="mnav"></nav>
+      <section id="mmain">
+        <header id="mhead"><h2 id="mtitle"></h2><button class="ibtn" id="mclose" title="Fermer (Échap)"></button></header>
+        <div id="mbody"></div>
+      </section>
+    </div>
+  </div>
+
+<script src="shared.js"></script>
+<script>
+  const { invoke } = window.__TAURI__.core;
+  const { listen } = window.__TAURI__.event;
+  const $ = (s) => document.querySelector(s);
+  const urlInput = $("#url");
+
+  const { store } = TX;
+
+  const ICONS = {
+    star: '<svg viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>',
+    clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+    down: '<svg viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg>',
+    mask: '<svg viewBox="0 0 24 24"><path d="M3 11c2-4 16-4 18 0v2c0 3-3 5-5 5-1.5 0-2-1-4-1s-2.5 1-4 1c-2 0-5-2-5-5z"/><circle cx="8.5" cy="12" r="1.3"/><circle cx="15.5" cy="12" r="1.3"/></svg>',
+    search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
+    gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+    close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    eye: '<svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+    copy: '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
+    trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
+    pen: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+    lockc: '<svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+  };
+
+  const host = (u) => { if (u === "about:blank") return "Page vide"; try { return new URL(u).hostname || u; } catch { return u; } };
+  const isHome = (u) => { try { const x = new URL(u); return x.host === location.host && x.pathname === "/home.html"; } catch { return false; } };
+  const fav = (u) => `https://icons.duckduckgo.com/ip3/${host(u)}.ico`;
+  const pretty = (u) => u.replace(/^https?:\/\//, "").replace(/\/$/, "");
+
+  let downloads = store.get("downloads", []);
+  let closedStack = [];
+  const overlays = new Set();
+  let tabs = [];
+  let activeId = null;
+  let panel = null;
+  const upd = { state: "idle", update: null, msg: "", pct: 0, version: "" };
+  const updRefresh = () => { renderRail(); if (settings && settings.section === "about") renderSettings(); };
+  async function checkUpdate() {
+    const u = window.__TAURI__ && window.__TAURI__.updater;
+    if (!u) { upd.state = "off"; return updRefresh(); }
+    upd.state = "checking"; updRefresh();
+    try {
+      const r = await u.check();
+      upd.update = r || null;
+      upd.state = r ? "available" : "uptodate";
+    } catch (e) { upd.state = "error"; upd.msg = String(e); }
+    updRefresh();
+  }
+  async function installUpdate() {
+    if (!upd.update) return;
+    upd.state = "downloading"; upd.pct = 0; updRefresh();
+    let total = 0, got = 0;
+    try {
+      await upd.update.downloadAndInstall((ev) => {
+        if (ev.event === "Started") total = ev.data.contentLength || 0;
+        else if (ev.event === "Progress") { got += ev.data.chunkLength; upd.pct = total ? Math.round(got / total * 100) : 0; const b = document.querySelector(".upd-bar > i"); if (b) b.style.width = upd.pct + "%"; }
+      });
+      await window.__TAURI__.process.relaunch();
+    } catch (e) { upd.state = "error"; upd.msg = String(e); updRefresh(); }
+  }
+  let settings = null;
+
+  let theme = TX.getTheme();
+  let bookmarks = store.get("bookmarks", []);
+  let history = store.get("history", []);
+  let sidebarApps = store.get("sidebarApps", [
+    { key: "whatsapp", name: "WhatsApp", url: "https://web.whatsapp.com/" },
+    { key: "discord",  name: "Discord",  url: "https://discord.com/app" },
+    { key: "chatgpt",  name: "ChatGPT",  url: "https://chatgpt.com/" },
+    { key: "spotify",  name: "Spotify",  url: "https://open.spotify.com/" },
+  ]);
+
+  const translucent = /Windows/i.test(navigator.userAgent);
+  const applyTheme = () => {
+    document.documentElement.dataset.theme = theme;
+    TX.applyAccent();
+    document.documentElement.classList.toggle("tl", translucent);
+    invoke("set_tint", { dark: theme === "noir" }).catch(() => {});
+  };
+
+  function renderRail() {
+    const rail = $("#rail");
+    rail.innerHTML = "";
+    const mk = (html, title, active, onclick, cls = "") => {
+      const b = document.createElement("button");
+      b.className = "ri " + cls + (active ? " active" : "");
+      b.title = title; b.innerHTML = html; b.onclick = onclick;
+      rail.appendChild(b);
+      return b;
+    };
+    const is = (kind, key) => panel && panel.kind === kind && panel.key === key;
+
+    const lg = mk('<img src="logo.png" alt="Tweax">', "Page d’accueil Tweax", false, () => activeId !== null && invoke("go_home", { id: activeId }), "logo");
+    rail.insertAdjacentHTML("beforeend", '<div class="sep"></div>');
+    mk(ICONS.star, "Favoris", is("bookmarks"), () => togglePanel({ kind: "bookmarks" }));
+    mk(ICONS.clock, "Historique", is("history"), () => togglePanel({ kind: "history" }));
+    mk(ICONS.down, "Téléchargements", is("downloads"), () => togglePanel({ kind: "downloads" }), downloads.some((d) => d.state === "progress") ? "dl-busy" : "");
+    mk(ICONS.mask, "Nouvel onglet privé", false, () => userTab({ private: true }));
+    rail.insertAdjacentHTML("beforeend", '<div class="sep"></div>');
+
+    for (const a of sidebarApps) {
+      const b = mk(`<img src="${fav(a.url)}" alt="">`, a.name, is("web", a.key), () => togglePanel({ kind: "web", key: a.key }));
+      b.querySelector("img").onerror = function () {
+        this.replaceWith(Object.assign(document.createElement("div"), { className: "ph", textContent: a.name[0].toUpperCase() }));
+      };
+    }
+    mk(ICONS.plus, "Ajouter un site à la barre latérale", false, () => openSettings("sidebar"));
+    rail.insertAdjacentHTML("beforeend", '<div class="grow"></div>');
+    if (TX.activeProfile() !== "default") {
+      const pb = mk('<div class="ph"></div>', "Profil : " + TX.profileName(), false, () => openSettings("profiles"));
+      pb.querySelector(".ph").textContent = (TX.profileName()[0] || "?").toUpperCase();
+    }
+    const gb = mk(ICONS.gear, "Réglages (Ctrl+,)", !!settings, () => (settings ? closeSettings() : openSettings()));
+    if (upd.state === "available" || upd.state === "downloading") { gb.classList.add("has-upd"); gb.title = "Réglages — mise à jour disponible"; }
+  }
+
+  async function togglePanel(p) {
+    if (panel && panel.kind === p.kind && panel.key === p.key) return closePanel();
+    panel = p;
+    document.body.classList.add("panel-open");
+    if (p.kind === "web") {
+      const app = sidebarApps.find((a) => a.key === p.key);
+      if (!app) return closePanel();
+      $("#pbody").innerHTML = "";
+      await invoke("show_web_panel", { key: app.key, url: app.url });
+    } else {
+      await invoke("hide_web_panels");
+      await invoke("set_panel", { open: true });
+      renderPanel();
+    }
+    renderRail();
+  }
+
+  async function closePanel() {
+    panel = null;
+    document.body.classList.remove("panel-open");
+    await invoke("set_panel", { open: false });
+    renderRail();
+  }
+
+  function listItem(entry, onRemove, navigable = true) {
+    const el = document.createElement("div");
+    el.className = "item";
+    el.innerHTML = `<img src="${fav(entry.url)}" onerror="this.style.visibility='hidden'"><div class="t"><b></b><small></small></div>`;
+    el.querySelector("b").textContent = entry.title || host(entry.url);
+    el.querySelector("small").textContent = pretty(entry.url);
+    if (navigable) el.onclick = () => activeId !== null && invoke("navigate", { id: activeId, url: entry.url });
+    else el.style.cursor = "default";
+    if (onRemove) {
+      const x = document.createElement("button");
+      x.className = "ibtn"; x.innerHTML = ICONS.close; x.title = "Supprimer";
+      x.onclick = (e) => { e.stopPropagation(); onRemove(); };
+      el.appendChild(x);
+    }
+    return el;
+  }
+
+  function renderPanel() {
+    if (!panel || panel.kind === "web") return;
+    const body = $("#pbody");
+    body.innerHTML = "";
+    const title = (t) => body.insertAdjacentHTML("beforeend", `<h2>${t}</h2>`);
+    const sub = (t) => body.insertAdjacentHTML("beforeend", `<h3>${t}</h3>`);
+
+    if (panel.kind === "bookmarks") {
+      title("Favoris");
+      if (!bookmarks.length) body.insertAdjacentHTML("beforeend", '<div class="empty">Aucun favori.<br>Clique sur l’étoile à droite de la barre d’adresse.</div>');
+      bookmarks.forEach((b, i) => body.appendChild(listItem(b, () => { bookmarks.splice(i, 1); store.set("bookmarks", bookmarks); renderPanel(); updateStar(); })));
+    }
+
+    if (panel.kind === "downloads") {
+      title("Téléchargements");
+      if (!downloads.length) body.insertAdjacentHTML("beforeend", '<div class="empty">Aucun téléchargement.</div>');
+      else {
+        const clr = document.createElement("div");
+        clr.className = "form";
+        clr.innerHTML = '<button class="ghost">Effacer la liste</button>';
+        clr.querySelector("button").onclick = () => { downloads = downloads.filter((d) => d.state === "progress"); store.set("downloads", downloads); renderPanel(); renderRail(); };
+        body.appendChild(clr);
+      }
+      downloads.forEach((d, i) => {
+        const row = document.createElement("div");
+        row.className = "dl";
+        row.innerHTML = '<div class="t"><b></b><small></small></div><div class="acts"></div>';
+        row.querySelector("b").textContent = d.name || "Fichier";
+        row.querySelector("small").textContent = d.state === "progress" ? "Téléchargement en cours…" : d.state === "done" ? "Terminé" : "Échec";
+        const acts = row.querySelector(".acts");
+        const add = (t, f) => { const b = document.createElement("button"); b.textContent = t; b.onclick = f; acts.appendChild(b); };
+        if (d.state === "done" && d.path) add("Ouvrir", () => invoke("open_path", { path: d.path }).catch(() => {}));
+        if (d.path && d.state !== "fail") add("Dossier", () => invoke("reveal_path", { path: d.path }).catch(() => {}));
+        if (d.state !== "progress") add("Retirer", () => { downloads.splice(i, 1); store.set("downloads", downloads); renderPanel(); renderRail(); });
+        body.appendChild(row);
+      });
+    }
+
+    if (panel.kind === "history") {
+      title("Historique");
+      if (!history.length) body.insertAdjacentHTML("beforeend", '<div class="empty">Rien pour l’instant.</div>');
+      if (history.length) {
+        const q = document.createElement("div");
+        q.className = "form"; q.innerHTML = '<input placeholder="Rechercher dans l’historique" spellcheck="false">';
+        body.appendChild(q);
+        const holder = document.createElement("div");
+        body.appendChild(holder);
+        const draw = () => {
+          holder.innerHTML = "";
+          const n = q.querySelector("input").value.toLowerCase();
+          history.slice().reverse().filter((h) => !n || (h.url + " " + h.title).toLowerCase().includes(n)).slice(0, 150).forEach((h) => holder.appendChild(listItem(h)));
+        };
+        q.querySelector("input").oninput = draw; draw();
+      }
+      if (history.length) {
+        const clear = document.createElement("div");
+        clear.className = "form"; clear.style.marginTop = "10px";
+        clear.innerHTML = "<button>Effacer l’historique</button>";
+        clear.querySelector("button").onclick = () => { history = []; store.set("history", history); renderPanel(); };
+        body.appendChild(clear);
+      }
+    }
+
+  }
+
+  const SECTIONS = [
+    { id: "appearance", group: "Personnalisation", label: "Apparence", icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>' },
+    { id: "home", group: "Personnalisation", label: "Accueil", icon: '<svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg>' },
+    { id: "sidebar", group: "Personnalisation", label: "Barre latérale", icon: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>' },
+    { id: "search", group: "Navigation", label: "Navigation", icon: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>' },
+    { id: "downloads", group: "Navigation", label: "Téléchargements", icon: '<svg viewBox="0 0 24 24"><path d="M4 15v4h16v-4M12 4v9m0 0l-3.5-3.5M12 13l3.5-3.5"/></svg>' },
+    { id: "keys", group: "Navigation", label: "Raccourcis", icon: '<svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6.5 10h.01M10 10h.01M13.5 10h.01M17 10h.01M7 14h10"/></svg>' },
+    { id: "general", group: "Confidentialité", label: "Protection", icon: '<svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>' },
+    { id: "passwords", group: "Confidentialité", label: "Mots de passe", icon: '<svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/></svg>' },
+    { id: "profiles", group: "Tweax", label: "Profils", icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>' },
+    { id: "backup", group: "Tweax", label: "Sauvegarde", icon: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v10h14V9M10 13h4"/></svg>' },
+    { id: "about", group: "Tweax", label: "Mises à jour", icon: '<svg viewBox="0 0 24 24"><path d="M12 4v10m0 0l-4-4m4 4l4-4M5 19h14"/></svg>' },
+  ];
+
+  async function openSettings(section) {
+    if (settings) { settings.section = section || settings.section; return renderSettings(); }
+    if (panel) { panel = null; document.body.classList.remove("panel-open"); await invoke("set_panel", { open: false }); }
+    settings = { section: section || "appearance" };
+    await invoke("hide_tabs");
+    $("#overlay").classList.add("open");
+    renderSettings(); renderRail();
+  }
+
+  function toggleRow(label, sub, val, fn) {
+    const row = document.createElement("div");
+    row.className = "upd-row";
+    row.innerHTML = '<span class="t"></span><span class="sw' + (val ? " on" : "") + '"></span>';
+    const t = row.querySelector(".t");
+    t.textContent = label;
+    if (sub) { const sp = document.createElement("span"); sp.className = "sub"; sp.textContent = sub; t.appendChild(sp); }
+    row.onclick = () => fn(!val);
+    return row;
+  }
+
+  async function closeSettings() {
+    if (!settings) return;
+    recording = null;
+    recError = "";
+    settings = null;
+    $("#overlay").classList.remove("open");
+    renderRail();
+    lastMode = ""; render();
+  }
+
+  let renderSeq = 0;
+  let vaultTimer = null;
+  const vaultLock = () => { clearTimeout(vaultTimer); invoke("vault_lock").catch(() => {}); };
+  const vaultTouch = () => { clearTimeout(vaultTimer); vaultTimer = setTimeout(async () => { await invoke("vault_lock").catch(() => {}); if (settings) { settings.vault = null; renderSettings(); } refreshKey(); }, 10 * 60 * 1000); };
+  const errText = (e) => (typeof e === "string" ? e : (e && e.message) || "Erreur");
+
+  async function renderPasswords(body, seq) {
+    let st;
+    try { st = await invoke("vault_status"); } catch (e) { body.textContent = errText(e); return; }
+    if (!settings || settings.section !== "passwords" || seq !== renderSeq) return;
+    const V = (settings.vault = settings.vault || { view: "list", q: "", msg: "" });
+    const el = (html, parent = body) => { const d = document.createElement("div"); d.innerHTML = html; const n = d.firstElementChild; parent.appendChild(n); return n; };
+    const letter = (n) => `<div class="ph"></div>`;
+
+    if (!st.exists) {
+      el('<p class="hint">Tes mots de passe importés sont chiffrés (Argon2id + XChaCha20-Poly1305) dans un coffre local protégé par un mot de passe maître. <b>Il ne peut pas être récupéré si tu l’oublies.</b></p>');
+      const f = el('<div class="form"><input id="m1" type="password" placeholder="Mot de passe maître (8 caractères min.)" autocomplete="off"><input id="m2" type="password" placeholder="Confirmer" autocomplete="off"><div><button class="btn">Créer le coffre</button></div><div class="err"></div></div>');
+      const go = async () => {
+        const a = f.querySelector("#m1").value, b = f.querySelector("#m2").value, err = f.querySelector(".err");
+        if (a !== b) return (err.textContent = "Les deux mots de passe sont différents.");
+        try { await invoke("vault_create", { master: a }); vaultTouch(); renderSettings(); } catch (e) { err.textContent = errText(e); }
+      };
+      f.querySelector("button").onclick = go;
+      f.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+      return;
+    }
+
+    if (!st.unlocked) {
+      el('<p class="hint">Le coffre est verrouillé.</p>');
+      const f = el('<div class="form"><input id="m1" type="password" placeholder="Mot de passe maître" autocomplete="off"><div><button class="btn">Déverrouiller</button></div><div class="err"></div></div>');
+      const go = async () => {
+        const btn = f.querySelector("button"), err = f.querySelector(".err");
+        btn.disabled = true; err.textContent = "";
+        try { await invoke("vault_unlock", { master: f.querySelector("#m1").value }); vaultTouch(); renderSettings(); }
+        catch (e) { err.textContent = errText(e); btn.disabled = false; }
+      };
+      f.querySelector("button").onclick = go;
+      f.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+      setTimeout(() => f.querySelector("#m1").focus(), 0);
+      return;
+    }
+
+    vaultTouch();
+
+    if (V.view === "edit") {
+      const e0 = V.edit || {};
+      el(`<p class="hint">${e0.id ? "Modifier l’entrée" : "Nouvelle entrée"}</p>`);
+      const f = el('<div class="form"><input id="fn" placeholder="Nom (facultatif)"><input id="fu" placeholder="Adresse du site (https://…)"><input id="fl" placeholder="Identifiant / e-mail" autocomplete="off"><div class="pw-bar" style="margin:0"><input id="fp" type="password" placeholder="Mot de passe" autocomplete="off"><button class="btn ghost" id="gen" type="button">Générer</button></div><div class="pw-bar" style="margin:0"><button class="btn" id="sv">Enregistrer</button><button class="btn ghost" id="cn">Annuler</button></div><div class="err"></div></div>');
+      f.querySelector("#fn").value = e0.name || ""; f.querySelector("#fu").value = e0.url || ""; f.querySelector("#fl").value = e0.username || ""; f.querySelector("#fp").value = e0.password || "";
+      f.querySelector("#gen").onclick = () => { const i = f.querySelector("#fp"); i.value = genPassword(20); i.type = "text"; };
+      f.querySelector("#cn").onclick = () => { V.view = "list"; V.edit = null; renderSettings(); };
+      f.querySelector("#sv").onclick = async () => {
+        try {
+          await invoke("vault_save", { id: e0.id ?? null, name: f.querySelector("#fn").value, url: f.querySelector("#fu").value, username: f.querySelector("#fl").value, password: f.querySelector("#fp").value, note: null });
+          V.view = "list"; V.edit = null; V.msg = "Entrée enregistrée."; V.warnCsv = false; renderSettings();
+        } catch (e) { f.querySelector(".err").textContent = errText(e); }
+      };
+      return;
+    }
+
+    if (V.view === "master") {
+      el('<p class="hint">Changer le mot de passe maître. Le coffre est ré-chiffré avec la nouvelle clé.</p>');
+      const f = el('<div class="form"><input id="o" type="password" placeholder="Mot de passe maître actuel" autocomplete="off"><input id="n1" type="password" placeholder="Nouveau mot de passe maître (8 caractères min.)" autocomplete="off"><input id="n2" type="password" placeholder="Confirmer le nouveau" autocomplete="off"><div class="pw-bar" style="margin:0"><button class="btn" id="sv">Changer</button><button class="btn ghost" id="cn">Annuler</button></div><div class="err"></div></div>');
+      f.querySelector("#cn").onclick = () => { V.view = "list"; renderSettings(); };
+      f.querySelector("#sv").onclick = async () => {
+        const err = f.querySelector(".err");
+        if (f.querySelector("#n1").value !== f.querySelector("#n2").value) return (err.textContent = "Les deux nouveaux mots de passe sont différents.");
+        try { await invoke("vault_change_master", { old: f.querySelector("#o").value, new: f.querySelector("#n1").value }); V.view = "list"; V.msg = "Mot de passe maître changé."; V.warnCsv = false; renderSettings(); }
+        catch (e) { err.textContent = errText(e); }
+      };
+      return;
+    }
+
+    if (V.view === "preview" && V.preview) {
+      const pv = V.preview;
+      el(`<p class="hint">Format détecté : <b></b>. ${pv.rows.length} identifiant(s) lu(s)${pv.invalid ? `, ${pv.invalid} ligne(s) ignorée(s) (sans mot de passe ou page interne)` : ""}.</p>`).querySelector("b").textContent = pv.format;
+      el(`<div class="banner"><b>${pv.new}</b> nouveau(x) · <b>${pv.duplicates}</b> déjà présent(s) · <b>${pv.conflicts}</b> avec un mot de passe différent</div>`);
+      let replace = false;
+      if (pv.conflicts) {
+        const c = el(`<label class="chk"><input type="checkbox"> Remplacer les ${pv.conflicts} mot(s) de passe différent(s) par ceux de l’import</label>`);
+        c.querySelector("input").onchange = (e) => (replace = e.target.checked);
+      }
+      const bar = el('<div class="pw-bar"><button class="btn" id="ok">Importer</button><button class="btn ghost" id="no">Annuler</button></div>');
+      const err = el('<div class="err"></div>');
+      bar.querySelector("#no").onclick = async () => { await invoke("vault_import_cancel").catch(() => {}); V.view = "list"; V.preview = null; renderSettings(); };
+      bar.querySelector("#ok").onclick = async () => {
+        try {
+          const r = await invoke("vault_import_commit", { replaceConflicts: replace });
+          V.view = "list"; V.preview = null;
+          V.msg = `${r.added} ajouté(s)` + (r.updated ? `, ${r.updated} mis à jour` : "") + (r.skipped ? `, ${r.skipped} ignoré(s)` : "") + ".";
+          V.warnCsv = true;
+          renderSettings();
+        } catch (e) { err.textContent = errText(e); }
+      };
+      const chipLabel = { new: "Nouveau", duplicate: "Déjà présent", conflict: "Différent" };
+      for (const r of pv.rows.slice(0, 400)) {
+        const row = el('<div class="pw-row"><div class="ph"></div><div class="t"><b></b><small></small></div><span class="chip"></span></div>');
+        row.querySelector(".ph").textContent = (r.name[0] || "?").toUpperCase();
+        row.querySelector("b").textContent = r.name;
+        row.querySelector("small").textContent = r.username || "(sans identifiant)";
+        const ch = row.querySelector(".chip"); ch.textContent = chipLabel[r.status]; ch.classList.add(r.status);
+      }
+      if (pv.rows.length > 400) el(`<div class="empty">… et ${pv.rows.length - 400} autres</div>`);
+      return;
+    }
+
+    el(`<p class="hint">${st.count} identifiant(s) dans le coffre.</p>`);
+    const bar = el('<div class="pw-bar"><button class="btn" id="imp">Importer depuis un navigateur</button><button class="btn ghost" id="add">Ajouter</button><button class="btn ghost" id="mm" title="Changer le mot de passe maître">Mot de passe maître</button><button class="btn ghost" id="lk" title="Verrouiller">Verrouiller</button><input type="file" id="file" accept=".csv,text/csv" hidden></div>');
+    const file = bar.querySelector("#file");
+    bar.querySelector("#imp").onclick = () => file.click();
+    bar.querySelector("#lk").onclick = async () => { await invoke("vault_lock"); V.view = "list"; renderSettings(); refreshKey(); };
+    bar.querySelector("#add").onclick = () => { V.view = "edit"; V.edit = {}; renderSettings(); };
+    bar.querySelector("#mm").onclick = () => { V.view = "master"; renderSettings(); };
+    file.onchange = async () => {
+      const f = file.files[0]; if (!f) return;
+      try {
+        const text = await f.text();
+        V.preview = await invoke("vault_import_preview", { csv: text });
+        V.view = "preview"; V.msg = "";
+      } catch (e) { V.msg = "Import impossible : " + errText(e); V.warnCsv = false; }
+      file.value = "";
+      renderSettings();
+    };
+    if (V.msg) el('<div class="banner"></div>').textContent = V.msg;
+    if (V.warnCsv) el("<div class=\"banner\">⚠ Le fichier CSV exporté contient tes mots de passe <b>en clair</b> : supprime-le maintenant (et vide la corbeille).</div>");
+    if (!st.count) {
+      el('<div class="banner">Pour exporter depuis ton ancien navigateur :<br>• <b>Chrome / Edge / Brave / Opera</b> : Paramètres → Mots de passe → ⋯ → Exporter les mots de passe<br>• <b>Firefox</b> : about:logins → ⋯ → Exporter les identifiants<br>• <b>Safari</b> : Fichier → Exporter → Mots de passe<br>Puis clique sur « Importer ».</div>');
+    }
+    let list;
+    let audit = [];
+    try { list = await invoke("vault_list"); audit = await invoke("vault_audit"); } catch (e) { el('<div class="err"></div>').textContent = errText(e); return; }
+    if (!settings || seq !== renderSeq) return;
+    const bad = {}; for (const a of audit) (bad[a.id] = bad[a.id] || []).push(a.reason);
+    const nWeak = audit.filter((a) => a.reason === "weak").length, nReuse = audit.filter((a) => a.reason === "reused").length;
+    if (nWeak || nReuse) el(`<div class="banner">🔍 Audit : <b>${nWeak}</b> mot(s) de passe faible(s), <b>${nReuse}</b> réutilisé(s) sur plusieurs sites. Pense à les changer.</div>`);
+    if (list.length) {
+      const q = el('<div class="pw-bar"><input placeholder="Rechercher" spellcheck="false"></div>').querySelector("input");
+      q.value = V.q || "";
+      const holder = el("<div></div>");
+      const draw = () => {
+        holder.innerHTML = "";
+        const needle = q.value.toLowerCase();
+        V.q = q.value;
+        for (const e of list.filter((x) => (x.name + " " + x.url + " " + x.username).toLowerCase().includes(needle))) {
+          const row = el('<div class="pw-row"><div class="ph"></div><div class="t"><b></b><small></small></div><span class="chips"></span><button class="ibtn" data-a="eye" title="Afficher"></button><button class="ibtn" data-a="pen" title="Modifier"></button><button class="ibtn" data-a="copy" title="Copier le mot de passe"></button><button class="ibtn" data-a="del" title="Supprimer"></button></div>', holder);
+          row.querySelector(".ph").textContent = (e.name[0] || "?").toUpperCase();
+          row.querySelector("b").textContent = e.name;
+          const small = row.querySelector("small"); small.textContent = e.username || "(sans identifiant)";
+          for (const r of bad[e.id] || []) { const c = document.createElement("span"); c.className = "chip bad"; c.textContent = r === "weak" ? "Faible" : "Réutilisé"; row.querySelector(".chips").appendChild(c); }
+          const [eye, pen, copy, del] = row.querySelectorAll("button");
+          pen.innerHTML = ICONS.pen;
+          pen.onclick = async () => { try { V.edit = { ...e, password: await invoke("vault_reveal", { id: e.id }) }; V.view = "edit"; renderSettings(); } catch (err) { small.textContent = errText(err); } };
+          eye.innerHTML = ICONS.eye; copy.innerHTML = ICONS.copy; del.innerHTML = ICONS.trash;
+          let shown = false;
+          eye.onclick = async () => {
+            shown = !shown;
+            try { small.textContent = shown ? (e.username ? e.username + " · " : "") + (await invoke("vault_reveal", { id: e.id })) : (e.username || "(sans identifiant)"); vaultTouch(); }
+            catch (err) { small.textContent = errText(err); }
+          };
+          copy.onclick = async () => {
+            try {
+              await navigator.clipboard.writeText(await invoke("vault_reveal", { id: e.id }));
+              copy.title = "Copié (effacé du presse-papiers dans 30 s)"; vaultTouch();
+              setTimeout(() => navigator.clipboard.writeText("").catch(() => {}), 30000);
+            } catch (err) { copy.title = errText(err); }
+          };
+          let armed = false;
+          del.onclick = async () => {
+            if (!armed) { armed = true; del.className = "ibtn danger"; del.textContent = "Confirmer ?"; setTimeout(() => { if (del.isConnected) { armed = false; del.className = "ibtn"; del.innerHTML = ICONS.trash; } }, 3000); return; }
+            await invoke("vault_delete", { id: e.id }); renderSettings();
+          };
+        }
+      };
+      q.oninput = draw; draw();
+    }
+  }
+
+  function genPassword(n = 20) {
+    const sets = ["abcdefghijkmnopqrstuvwxyz", "ABCDEFGHJKLMNPQRSTUVWXYZ", "23456789", "!@#$%^&*-_=+?"];
+    const all = sets.join("");
+    const rnd = (max) => { const lim = Math.floor(2 ** 32 / max) * max; const a = new Uint32Array(1); do crypto.getRandomValues(a); while (a[0] >= lim); return a[0] % max; };
+    for (;;) {
+      let s = ""; for (let i = 0; i < n; i++) s += all[rnd(all.length)];
+      if (sets.every((st) => [...st].some((c) => s.includes(c)))) return s;
+    }
+  }
+
+  let zenHidden = false;
+  let zenMode = false;
+  let zenBusy = false;
+
+  async function setZen(on, autoHide = null) {
+    if (zenBusy || settings || afillOpen) return;
+    if (on === zenHidden && (autoHide === null || autoHide === zenMode)) return;
+    zenBusy = true;
+    try {
+      if (on && panel) await closePanel();
+      await invoke("set_zen", { on, autoHide });
+      zenHidden = on;
+      if (autoHide !== null) zenMode = autoHide;
+      document.body.classList.toggle("zen", on);
+      $("#zen").classList.toggle("on", zenMode);
+      $("#zen").title = zenMode
+        ? "Désactiver le masquage automatique"
+        : "Activer le masquage automatique";
+    } catch (err) {
+      console.error("Impossible de changer le mode agrandi :", err);
+    } finally {
+      zenBusy = false;
+    }
+  }
+
+  $("#zen").onclick = () => {
+    const enable = !zenMode;
+    setZen(enable, enable);
+  };
+
+  $("#zen").classList.toggle("on", zenMode);
+  $("#zen").title = "Activer le masquage automatique";
+
+  let afillOpen = false;
+  async function refreshKey() {
+    const cur = tabs.find((t) => t.id === activeId);
+    let n = 0;
+    try {
+      if (cur && /^https?:/.test(cur.url) && !isHome(cur.url)) {
+        const st = await invoke("vault_status");
+        if (st.unlocked) n = (await invoke("vault_matches", { host: host(cur.url) })).length;
+      }
+    } catch {}
+    $("#key").classList.toggle("on", n > 0);
+    $("#key").title = n ? `Remplir l’identifiant (${n})` : "Mots de passe";
+  }
+  async function openAutofill() {
+    if (afillOpen) return closeAutofill();
+    if (settings) return;
+    await invoke("hide_tabs");
+    afillOpen = true;
+    $("#afill").classList.add("open");
+    renderAutofill();
+  }
+  async function closeAutofill() {
+    if (!afillOpen) return;
+    afillOpen = false;
+    $("#afill").classList.remove("open");
+    lastMode = ""; render();
+    refreshKey();
+  }
+  async function renderAutofill() {
+    const box = $("#afbox");
+    box.innerHTML = "<h2>Mots de passe</h2>";
+    const add = (html) => { const d = document.createElement("div"); d.innerHTML = html; const n = d.firstElementChild; box.appendChild(n); return n; };
+    let st;
+    try { st = await invoke("vault_status"); } catch (e) { return add('<div class="err"></div>').append(errText(e)); }
+    if (!afillOpen) return;
+    const toSettings = (label) => { const b = add(`<div class="form"><button class="btn">${label}</button></div>`).querySelector("button"); b.onclick = async () => { await closeAutofill(); openSettings("passwords"); }; };
+    if (!st.exists) { add('<p class="hint">Aucun coffre pour l’instant. Crée-le puis importe tes mots de passe depuis ton ancien navigateur.</p>'); return toSettings("Ouvrir les réglages"); }
+    if (!st.unlocked) {
+      const f = add('<div class="form"><input type="password" placeholder="Mot de passe maître" autocomplete="off"><button class="btn">Déverrouiller</button><div class="err"></div></div>');
+      const go = async () => { try { await invoke("vault_unlock", { master: f.querySelector("input").value }); vaultTouch(); renderAutofill(); } catch (e) { f.querySelector(".err").textContent = errText(e); } };
+      f.querySelector("button").onclick = go;
+      f.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+      setTimeout(() => f.querySelector("input").focus(), 0);
+      return;
+    }
+    vaultTouch();
+    const cur = tabs.find((t) => t.id === activeId);
+    if (!cur || !/^https:/.test(cur.url) || isHome(cur.url)) { add('<p class="hint">Ouvre une page de connexion en HTTPS pour remplir un identifiant.</p>'); return toSettings("Gérer les mots de passe"); }
+    let list = [];
+    try { list = await invoke("vault_matches", { host: host(cur.url) }); } catch (e) { return add('<div class="err"></div>').append(errText(e)); }
+    if (!afillOpen) return;
+    if (!list.length) add(`<p class="hint">Aucun identifiant enregistré pour <b></b>.</p>`).querySelector("b").textContent = host(cur.url);
+    const err = add('<div class="err"></div>');
+    for (const e of list) {
+      const row = add('<div class="pw-row"><div class="ph"></div><div class="t"><b></b><small></small></div></div>');
+      row.querySelector(".ph").textContent = (e.name[0] || "?").toUpperCase();
+      row.querySelector("b").textContent = e.name;
+      row.querySelector("small").textContent = e.username || "(sans identifiant)";
+      row.onclick = async () => { try { await invoke("vault_autofill", { tabId: activeId, entryId: e.id }); await closeAutofill(); } catch (x) { err.textContent = errText(x); } };
+    }
+    toSettings("Gérer les mots de passe");
+  }
+
+  function plainItem(title, sub, actions) {
+    const el = document.createElement("div");
+    el.className = "item";
+    el.style.cursor = "default";
+    el.innerHTML = '<div class="t"><b></b><small></small></div>';
+    el.querySelector("b").textContent = title;
+    if (sub) el.querySelector("small").textContent = sub; else el.querySelector("small").remove();
+    for (const a of actions || []) {
+      const b = document.createElement("button");
+      if (a.icon) { b.className = "ibtn"; b.innerHTML = a.icon; b.title = a.title || ""; } else { b.className = "mini"; b.textContent = a.label; }
+      b.onclick = (e) => { e.stopPropagation(); a.fn(b); };
+      el.appendChild(b);
+    }
+    return el;
+  }
+
+  const normHost = (v) => {
+    const h = String(v || "").trim().toLowerCase().replace(/^[a-z]+:\/\//, "").replace(/[\/?#].*$/, "").replace(/^www\./, "");
+    return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(h) ? h : "";
+  };
+  const adblockSync = () => invoke("set_adblock", { enabled: store.get("adblock", false), allow: store.get("adblockAllow", []) }).catch(() => {});
+  const syncDownloads = () => invoke("set_downloads", { dir: store.get("dlDir", "") || null, ask: store.get("dlAsk", false) }).catch(() => {});
+  const isBlank = (u) => u === "about:blank";
+  const newTabTarget = () => {
+    const m = store.get("newTab", "home");
+    if (m === "blank") return "about:blank";
+    if (m === "url") { const u = store.get("newTabUrl", ""); if (/^https?:/i.test(u)) return u; }
+    return undefined;
+  };
+  const userTab = (opts) => newTab(newTabTarget(), opts);
+
+  async function switchProfile(id) {
+    TX.setProfile(id);
+    try { await window.__TAURI__.process.relaunch(); } catch (e) { console.error(e); }
+  }
+  async function removeProfile(id) {
+    await invoke("delete_profile_data", { id }).catch(() => {});
+    TX.dropProfileData(id);
+    TX.saveProfiles(TX.profiles().filter((p) => p.id !== id));
+    settings.delProfile = null;
+    renderSettings();
+  }
+
+  function renderSettings() {
+    if (!settings) return;
+    const nav = $("#mnav"), body = $("#mbody");
+    nav.innerHTML = "<h1>Réglages</h1>";
+    let lastGroup = "";
+    for (const sec of SECTIONS) {
+      if (sec.group !== lastGroup) { lastGroup = sec.group; const g = document.createElement("div"); g.className = "ngrp"; g.textContent = sec.group; nav.appendChild(g); }
+      const b = document.createElement("button");
+      b.className = "nv" + (sec.id === settings.section ? " on" : "");
+      b.innerHTML = sec.icon + "<span>" + sec.label + "</span>";
+      b.onclick = () => { settings.section = sec.id; renderSettings(); };
+      nav.appendChild(b);
+    }
+    $("#mtitle").textContent = SECTIONS.find((x) => x.id === settings.section).label;
+    body.innerHTML = "";
+    const grp = (t) => body.insertAdjacentHTML("beforeend", `<div class="grp">${t}</div>`);
+    const hint = (t) => body.insertAdjacentHTML("beforeend", `<p class="hint">${t}</p>`);
+
+    if (settings.section === "appearance") {
+      grp("Thème");
+      hint("Choisis l’ambiance de Tweax. Sous Windows, la fenêtre reste translucide dans les deux thèmes.");
+      const g = document.createElement("div");
+      g.className = "thm-grid";
+      for (const [k, label] of [["noir", "Noir"], ["blanc", "Blanc"]]) {
+        const b = document.createElement("button");
+        b.className = "thm" + (k === theme ? " sel" : "");
+        b.innerHTML = `<div class="pv ${k}"><i></i></div><div class="row"><span>${label}</span><span class="ck"></span></div>`;
+        b.onclick = () => { theme = k; store.set("theme", k); applyTheme(); renderSettings(); };
+        g.appendChild(b);
+      }
+      body.appendChild(g);
+      grp("Couleur d’accent");
+      const sw = document.createElement("div");
+      sw.className = "swatches";
+      const curA = TX.getAccent();
+      for (const a of TX.ACCENTS) {
+        const b = document.createElement("button");
+        b.className = "swc" + (a.id === curA ? " sel" : "");
+        b.title = a.name;
+        b.style.background = a.color || "linear-gradient(135deg, #fff 50%, #000 50%)";
+        b.onclick = () => { store.set("accent", a.id); TX.applyAccent(); renderSettings(); };
+        sw.appendChild(b);
+      }
+      body.appendChild(sw);
+      grp("Fenêtre");
+      const zs = document.createElement("div");
+      zs.className = "stack";
+      zs.appendChild(toggleRow("Page en grand au démarrage", "Les barres reviennent au survol du bord.", store.get("zenStart", false), (v) => { store.set("zenStart", v); renderSettings(); }));
+      body.appendChild(zs);
+    }
+
+    if (settings.section === "search") {
+      grp("Moteur de recherche");
+      hint("Utilisé par la barre d’adresse et par l’accueil.");
+      const cur = TX.getEngineId();
+      const o = document.createElement("div");
+      o.className = "opts";
+      const options = Object.entries(TX.ENGINES).map(([id, e]) => [id, e.name, e.url]).concat([["custom", "Personnalisé", ""]]);
+      for (const [id, label, url] of options) {
+        const b = document.createElement("div");
+        b.className = "opt" + (id === cur ? " sel" : "");
+        b.innerHTML = (url ? `<img src="${fav(url)}" onerror="this.style.visibility='hidden'">` : "") + `<span class="n"></span><span class="ck"></span>`;
+        b.querySelector(".n").textContent = label;
+        b.onclick = () => { store.set("engine", id); renderSettings(); };
+        o.appendChild(b);
+      }
+      body.appendChild(o);
+      if (cur === "custom") {
+        grp("Adresse du moteur");
+        const cf = document.createElement("div");
+        cf.className = "form";
+        cf.innerHTML = '<input id="ce" placeholder="https://exemple.com/search?q=%s"><div><button class="btn">Enregistrer</button></div>';
+        const input = cf.querySelector("#ce");
+        input.value = store.get("customEngine", "");
+        cf.querySelector("button").onclick = () => {
+          const v = input.value.trim();
+          if (!/^https?:\/\/.+%s/.test(v)) { input.style.borderColor = "var(--accent)"; input.value = ""; input.placeholder = "L’adresse doit contenir %s"; return; }
+          store.set("customEngine", v); renderSettings();
+        };
+        body.appendChild(cf);
+      }
+      grp("Mots-clés");
+      hint("Tape un mot-clé puis ta recherche dans la barre d’adresse, par exemple yt musique. L’adresse doit contenir %s.");
+      const kws = TX.keywords();
+      if (!kws.length) body.insertAdjacentHTML("beforeend", '<div class="empty">Aucun mot-clé.</div>');
+      for (const e of kws) body.appendChild(plainItem(e.k, e.url, [{ icon: ICONS.close, title: "Supprimer", fn: () => { TX.saveKeywords(kws.filter((x) => x.k !== e.k)); renderSettings(); } }]));
+      const kf = document.createElement("div");
+      kf.className = "form row";
+      kf.innerHTML = '<input id="kk" placeholder="Mot-clé" spellcheck="false" maxlength="12"><input id="ku" placeholder="https://exemple.com/?q=%s" spellcheck="false"><button>Ajouter</button>';
+      const addKw = () => {
+        const ki = kf.querySelector("#kk"), ui = kf.querySelector("#ku");
+        const k = ki.value.trim().toLowerCase(), url = ui.value.trim();
+        if (!/^[a-z0-9]{1,12}$/.test(k) || !/^https?:\/\/.+%s/.test(url) || kws.some((x) => x.k === k)) { ki.style.borderColor = "var(--accent)"; ui.style.borderColor = "var(--accent)"; return; }
+        TX.saveKeywords(kws.concat([{ k, url }]));
+        renderSettings();
+      };
+      kf.querySelector("button").onclick = addKw;
+      kf.addEventListener("keydown", (e) => { if (e.key === "Enter") addKw(); });
+      body.appendChild(kf);
+      const kr = document.createElement("div");
+      kr.className = "form";
+      kr.innerHTML = '<button class="btn">Valeurs par défaut</button>';
+      kr.querySelector("button").onclick = () => { TX.saveKeywords(TX.KEYWORDS_DEFAULT); renderSettings(); };
+      body.appendChild(kr);
+
+      grp("Nouvel onglet");
+      const nto = document.createElement("div");
+      nto.className = "opts";
+      const curNt = store.get("newTab", "home");
+      for (const [id, label] of [["home", "Accueil"], ["blank", "Page vide"], ["url", "Adresse choisie"]]) {
+        const r = document.createElement("div");
+        r.className = "opt" + (curNt === id ? " sel" : "");
+        r.innerHTML = '<span class="n"></span><span class="ck"></span>';
+        r.querySelector(".n").textContent = label;
+        r.onclick = () => { store.set("newTab", id); renderSettings(); };
+        nto.appendChild(r);
+      }
+      body.appendChild(nto);
+      if (curNt === "url") {
+        const nf = document.createElement("div");
+        nf.className = "form";
+        nf.innerHTML = '<input id="nu" placeholder="Adresse du site" spellcheck="false"><div><button class="btn">Enregistrer</button></div>';
+        const ni = nf.querySelector("#nu");
+        ni.value = store.get("newTabUrl", "");
+        nf.querySelector("button").onclick = () => {
+          const u = TX.resolve(ni.value);
+          if (!/^https?:/i.test(u)) { ni.style.borderColor = "var(--accent)"; return; }
+          store.set("newTabUrl", u);
+          ni.value = u;
+        };
+        body.appendChild(nf);
+      }
+
+      grp("Démarrage");
+      const sst = document.createElement("div");
+      sst.className = "stack";
+      sst.appendChild(toggleRow("Restaurer les onglets au démarrage", "", store.get("restoreSession", true), (v) => { store.set("restoreSession", v); renderSettings(); }));
+      body.appendChild(sst);
+    }
+
+    if (settings.section === "sidebar") {
+      hint("Les sites de la barre latérale s’ouvrent à gauche et gardent leur session.");
+      if (!sidebarApps.length) body.insertAdjacentHTML("beforeend", '<div class="empty">Aucun site pour l’instant.</div>');
+      for (const a of sidebarApps) {
+        body.appendChild(listItem({ url: a.url, title: a.name }, async () => {
+          sidebarApps = sidebarApps.filter((x) => x.key !== a.key);
+          store.set("sidebarApps", sidebarApps);
+          await invoke("close_web_panel", { key: a.key });
+          renderRail(); renderSettings();
+        }, false));
+      }
+      grp("Ajouter un site");
+      const f = document.createElement("div");
+      f.className = "form row";
+      f.innerHTML = '<input id="an" placeholder="Nom (ex. Telegram)"><input id="au" placeholder="web.telegram.org"><button>Ajouter</button>';
+      const add = () => {
+        const name = f.querySelector("#an").value.trim();
+        let url = f.querySelector("#au").value.trim();
+        if (!name || !url) return;
+        if (!/^https?:\/\//.test(url)) url = "https://" + url;
+        sidebarApps.push({ key: "c" + Date.now(), name, url });
+        store.set("sidebarApps", sidebarApps);
+        renderRail(); renderSettings();
+      };
+      f.querySelector("button").onclick = add;
+      f.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
+      body.appendChild(f);
+    }
+
+    if (settings.section === "passwords") renderPasswords(body, ++renderSeq);
+
+    if (settings.section === "general") {
+      grp("Publicités");
+      const st = document.createElement("div");
+      st.className = "stack";
+      st.appendChild(toggleRow("Bloquer les publicités", "Agit sur les nouveaux onglets.", store.get("adblock", false), (v) => { store.set("adblock", v); adblockSync(); renderSettings(); }));
+      body.appendChild(st);
+
+      grp("Exceptions");
+      hint("Les publicités restent autorisées sur ces sites après rechargement de la page.");
+      const allow = store.get("adblockAllow", []);
+      if (!allow.length) body.insertAdjacentHTML("beforeend", '<div class="empty">Aucune exception.</div>');
+      for (const h of allow) body.appendChild(plainItem(h, "", [{ icon: ICONS.close, title: "Supprimer", fn: () => { store.set("adblockAllow", allow.filter((x) => x !== h)); adblockSync(); renderSettings(); } }]));
+      const af = document.createElement("div");
+      af.className = "form row2";
+      af.innerHTML = '<input id="ah" placeholder="exemple.com" spellcheck="false"><button>Ajouter</button>';
+      const addAllow = (v) => {
+        const h = normHost(v);
+        if (!h) { af.querySelector("#ah").style.borderColor = "var(--accent)"; return; }
+        if (!allow.includes(h)) { store.set("adblockAllow", allow.concat([h])); adblockSync(); }
+        renderSettings();
+      };
+      af.querySelector("button").onclick = () => addAllow(af.querySelector("#ah").value);
+      af.addEventListener("keydown", (e) => { if (e.key === "Enter") addAllow(af.querySelector("#ah").value); });
+      body.appendChild(af);
+      const ct = curTab();
+      const ch = ct && /^https?:/.test(ct.url) && !isHome(ct.url) ? normHost(host(ct.url)) : "";
+      if (ch && !allow.includes(ch)) {
+        const cf = document.createElement("div");
+        cf.className = "form";
+        cf.innerHTML = '<button class="btn"></button>';
+        cf.querySelector("button").textContent = "Autoriser " + ch;
+        cf.querySelector("button").onclick = () => addAllow(ch);
+        body.appendChild(cf);
+      }
+
+      grp("Données");
+      const ds = document.createElement("div");
+      ds.className = "stack";
+      ds.appendChild(toggleRow("Effacer cookies et cache à la fermeture", "Les connexions aux sites seront perdues.", store.get("clearOnExit", false), (v) => { store.set("clearOnExit", v); invoke("set_clear_on_exit", { enabled: v }).catch(() => {}); renderSettings(); }));
+      body.appendChild(ds);
+      const cb = document.createElement("div");
+      cb.className = "form";
+      cb.innerHTML = '<button class="btn" id="cc"></button><button class="btn" id="ch"></button>';
+      const bc = cb.querySelector("#cc"), bh = cb.querySelector("#ch");
+      bc.textContent = settings.cleared ? "Cookies et cache effacés" : "Effacer cookies et cache";
+      bc.disabled = !!settings.cleared;
+      bc.onclick = async () => { await invoke("clear_browsing_data").catch(() => {}); settings.cleared = true; renderSettings(); };
+      bh.textContent = history.length ? "Effacer l’historique" : "Historique vide";
+      bh.disabled = !history.length;
+      bh.onclick = () => { history = []; store.set("history", history); renderSettings(); };
+      body.appendChild(cb);
+    }
+
+    if (settings.section === "home") {
+      const hc = TX.homeConfig();
+      const st = document.createElement("div");
+      st.className = "stack";
+      st.appendChild(toggleRow("Afficher l’heure", "", hc.clock, (v) => { TX.saveHome({ clock: v }); renderSettings(); }));
+      st.appendChild(toggleRow("Afficher la date", "", hc.date, (v) => { TX.saveHome({ date: v }); renderSettings(); }));
+      st.appendChild(toggleRow("Afficher les raccourcis", "", hc.tiles, (v) => { TX.saveHome({ tiles: v }); renderSettings(); }));
+      body.appendChild(st);
+      if (hc.tiles) {
+        body.insertAdjacentHTML("beforeend", '<div class="grp">Source des raccourcis</div>');
+        const o = document.createElement("div");
+        o.className = "opts";
+        for (const [id, label] of [["bookmarks", "Mes favoris"], ["custom", "Liste personnalisée"]]) {
+          const r = document.createElement("div");
+          r.className = "opt" + (hc.source === id ? " sel" : "");
+          r.innerHTML = '<span class="n"></span><span class="ck"></span>';
+          r.querySelector(".n").textContent = label;
+          r.onclick = () => { TX.saveHome({ source: id }); renderSettings(); };
+          o.appendChild(r);
+        }
+        body.appendChild(o);
+        if (hc.source === "custom") {
+          hc.custom.forEach((c, i) => body.appendChild(listItem(c, () => { const l = hc.custom.slice(); l.splice(i, 1); TX.saveHome({ custom: l }); renderSettings(); }, false)));
+          const f = document.createElement("div");
+          f.className = "form";
+          f.innerHTML = '<input id="cn" placeholder="Nom" spellcheck="false"><input id="cu" placeholder="Adresse du site (https://…)" spellcheck="false"><button>Ajouter</button>';
+          const add = () => {
+            const u = TX.resolve(f.querySelector("#cu").value);
+            if (!/^https?:/i.test(u) || hc.custom.length >= 8) return;
+            TX.saveHome({ custom: hc.custom.concat([{ title: f.querySelector("#cn").value.trim() || host(u), url: u }]) });
+            renderSettings();
+          };
+          f.querySelector("button").onclick = add;
+          f.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
+          body.appendChild(f);
+        }
+      }
+      body.insertAdjacentHTML("beforeend", '<div class="grp">Météo</div>');
+      const wf = document.createElement("div");
+      wf.className = "form";
+      wf.innerHTML = '<input id="wx" placeholder="Ville, vide pour désactiver" spellcheck="false">';
+      const wi = wf.querySelector("input");
+      wi.value = hc.weather;
+      wi.addEventListener("change", () => TX.saveHome({ weather: wi.value.trim() }));
+      body.appendChild(wf);
+    }
+
+    if (settings.section === "downloads") {
+      hint("Choisis où les fichiers sont enregistrés.");
+      const dir = store.get("dlDir", "");
+      const actions = [{ label: "Choisir", fn: async () => { const p = await invoke("pick_folder").catch(() => null); if (p) { store.set("dlDir", p); await syncDownloads(); renderSettings(); } } }];
+      if (dir) actions.push({ label: "Par défaut", fn: async () => { store.del("dlDir"); await syncDownloads(); renderSettings(); } });
+      body.appendChild(plainItem("Dossier", dir || "Dossier Téléchargements", actions));
+      grp("Enregistrement");
+      const ds = document.createElement("div");
+      ds.className = "stack";
+      ds.appendChild(toggleRow("Demander où enregistrer chaque fichier", "", store.get("dlAsk", false), (v) => { store.set("dlAsk", v); syncDownloads(); renderSettings(); }));
+      body.appendChild(ds);
+    }
+
+    if (settings.section === "profiles") {
+      const act = TX.activeProfile();
+      hint("Chaque profil a ses favoris, son historique, ses onglets, ses sites latéraux et ses connexions. Changer de profil relance Tweax.");
+      for (const p of TX.profiles()) {
+        const isAct = p.id === act;
+        const actions = [];
+        if (!isAct) actions.push({ label: "Utiliser", fn: () => switchProfile(p.id) });
+        if (!isAct && p.id !== "default") actions.push(settings.delProfile === p.id
+          ? { label: "Confirmer", fn: () => removeProfile(p.id) }
+          : { icon: ICONS.trash, title: "Supprimer", fn: () => { settings.delProfile = p.id; renderSettings(); } });
+        body.appendChild(plainItem(p.name, isAct ? "Profil actif" : "", actions));
+      }
+      grp("Nouveau profil");
+      const pf = document.createElement("div");
+      pf.className = "form row2";
+      pf.innerHTML = '<input id="pn" placeholder="Nom du profil" maxlength="24" spellcheck="false"><button>Créer</button>';
+      const addProfile = () => {
+        const pi = pf.querySelector("#pn");
+        const name = pi.value.trim();
+        if (!name || TX.profiles().some((p) => p.name.toLowerCase() === name.toLowerCase())) { pi.style.borderColor = "var(--accent)"; return; }
+        TX.saveProfiles(TX.profiles().concat([{ id: TX.newProfileId(), name }]));
+        renderSettings();
+      };
+      pf.querySelector("button").onclick = addProfile;
+      pf.addEventListener("keydown", (e) => { if (e.key === "Enter") addProfile(); });
+      body.appendChild(pf);
+    }
+
+    if (settings.section === "backup") {
+      hint("Enregistre les réglages, favoris, historique et sites latéraux du profil actif dans un fichier. Les mots de passe ne sont pas inclus.");
+      const bf = document.createElement("div");
+      bf.className = "form row2 two";
+      bf.innerHTML = '<button class="btn" id="bx">Exporter</button><button class="btn" id="bi">Importer</button><input type="file" id="bf" accept=".json,application/json" hidden>';
+      bf.querySelector("#bx").onclick = async () => {
+        const d = new Date().toISOString().slice(0, 10);
+        try {
+          const path = await invoke("save_text_file", { name: "tweax-" + TX.activeProfile() + "-" + d + ".json", content: JSON.stringify(TX.exportAll(), null, 2) });
+          settings.backupMsg = "Enregistré : " + path;
+          invoke("reveal_path", { path }).catch(() => {});
+        } catch (e) { settings.backupMsg = errText(e); }
+        renderSettings();
+      };
+      const fi = bf.querySelector("#bf");
+      bf.querySelector("#bi").onclick = () => fi.click();
+      fi.onchange = async () => {
+        const f = fi.files[0];
+        if (!f) return;
+        try {
+          const n = TX.importAll(JSON.parse(await f.text()));
+          if (n < 0) settings.backupMsg = "Fichier invalide.";
+          else {
+            settings.backupMsg = n + " éléments importés. Redémarrage…";
+            renderSettings();
+            setTimeout(() => window.__TAURI__.process.relaunch().catch(() => {}), 1200);
+            return;
+          }
+        } catch { settings.backupMsg = "Fichier invalide."; }
+        renderSettings();
+      };
+      body.appendChild(bf);
+      if (settings.backupMsg) { const p = document.createElement("p"); p.className = "hint"; p.textContent = settings.backupMsg; body.appendChild(p); }
+    }
+
+    if (settings.section === "about") {
+      if (!upd.version && window.__TAURI__ && window.__TAURI__.app) window.__TAURI__.app.getVersion().then((v) => { upd.version = v; if (settings && settings.section === "about") renderSettings(); }).catch(() => {});
+      const card = document.createElement("div");
+      card.className = "upd-card";
+      card.innerHTML = '<div class="upd-head"><div class="upd-logo"><img src="logo.png" alt=""></div><div class="upd-id"><b>Tweax</b><span></span></div><div class="act"></div></div><div class="upd-status"><i class="upd-dot"></i><span></span></div>';
+      card.querySelector(".upd-id span").textContent = upd.version ? "Version " + upd.version : "";
+      const act = card.querySelector(".act");
+      const dot = card.querySelector(".upd-dot");
+      const status = card.querySelector(".upd-status span");
+      const btn = (t, f) => { const b = document.createElement("button"); b.className = "btn"; b.textContent = t; b.onclick = f; act.appendChild(b); };
+      const extra = (el) => card.appendChild(el);
+      const st = {
+        off: ["", "Mises à jour indisponibles dans cette version."],
+        checking: ["busy", "Recherche en cours…"],
+        uptodate: ["ok", "Tweax est à jour."],
+        available: ["new", upd.update ? "Version " + upd.update.version + " disponible." : ""],
+        downloading: ["busy", "Téléchargement… " + upd.pct + " %"],
+        error: ["bad", "La vérification a échoué."],
+        idle: ["", "Aucune vérification effectuée."],
+      }[upd.state];
+      dot.className = "upd-dot " + st[0];
+      status.textContent = st[1];
+      if (upd.state === "uptodate") btn("Vérifier", checkUpdate);
+      if (upd.state === "idle") btn("Vérifier", checkUpdate);
+      if (upd.state === "error") btn("Réessayer", checkUpdate);
+      if (upd.state === "available") btn("Installer", installUpdate);
+      if (upd.state === "available" && upd.update && upd.update.body) { const n = document.createElement("div"); n.className = "upd-notes"; n.textContent = upd.update.body; extra(n); }
+      if (upd.state === "downloading") { const d = document.createElement("div"); d.className = "upd-bar"; d.innerHTML = '<i style="width:' + upd.pct + '%"></i>'; extra(d); }
+      if (upd.state === "error") { const n = document.createElement("div"); n.className = "upd-err"; n.textContent = upd.msg; extra(n); }
+      body.appendChild(card);
+      const auto = TX.store.get("autoCheckUpdates", true);
+      const row = document.createElement("div");
+      row.className = "upd-row";
+      row.innerHTML = '<span class="t">Vérifier au démarrage</span><span class="sw' + (auto ? " on" : "") + '"></span>';
+      row.onclick = () => { TX.store.set("autoCheckUpdates", !auto); renderSettings(); };
+      body.appendChild(row);
+    }
+
+    if (settings.section === "keys") {
+      const wrap = document.createElement("div");
+      for (const a of ACTIONS) {
+        const rec = recording === a.id;
+        const row = document.createElement("div");
+        row.className = "kbrow";
+        row.innerHTML = '<span class="l"></span><kbd></kbd><button></button>';
+        row.querySelector(".l").textContent = a.label;
+        const kb = row.querySelector("kbd");
+        kb.textContent = rec ? "Appuie sur une touche…" : combosOf(a).map(prettyKey).join("  /  ");
+        if (rec) kb.classList.add("rec");
+        const btn = row.querySelector("button");
+        btn.textContent = rec ? "Annuler" : "Modifier";
+        btn.onclick = () => { recording = rec ? null : a.id; recError = ""; renderSettings(); };
+        wrap.appendChild(row);
+      }
+      body.appendChild(wrap);
+      if (recError) { const p = document.createElement("p"); p.className = "hint"; p.textContent = recError; body.appendChild(p); }
+      const rs = document.createElement("div");
+      rs.className = "form";
+      rs.innerHTML = '<button class="btn">Réinitialiser</button>';
+      rs.querySelector("button").onclick = () => { store.set("keys", {}); recording = null; recError = ""; syncShortcuts(); renderSettings(); };
+      body.appendChild(rs);
+    }
+  }
+
+  function updateStar() {
+    const cur = tabs.find((t) => t.id === activeId);
+    $("#star").classList.toggle("on", !!cur && !isHome(cur.url) && bookmarks.some((b) => b.url === cur.url));
+  }
+
+  setTimeout(() => { if (TX.store.get("autoCheckUpdates", true)) checkUpdate(); }, 4000);
+
+  let lastMode = "";
+  let lazySeq = 0;
+  const tabCache = new WeakMap();
+  const plusBtn = document.createElement("button");
+  plusBtn.className = "ibtn";
+  plusBtn.title = "Nouvel onglet (Ctrl+T)";
+  plusBtn.innerHTML = ICONS.plus;
+  plusBtn.onclick = () => userTab();
+  plusBtn.oncontextmenu = (e) => { e.preventDefault(); openCtx(e.clientX, e.clientY, [["Nouvel onglet", () => userTab()], ["Nouvel onglet privé", () => userTab({ private: true })], ["Rouvrir l’onglet fermé", reopenTab]]); };
+
+  function tabSig(t) {
+    const home = !t.url || isHome(t.url);
+    return [t.id === activeId ? 1 : 0, t.pinned ? 1 : 0, t.private ? 1 : 0, home ? 1 : 0, t.loading ? 1 : 0, home ? "" : host(t.url)].join("|");
+  }
+
+  function buildTab(t) {
+    const el = document.createElement("div");
+    el.className = "tab" + (t.id === activeId ? " active" : "") + (t.pinned ? " pin" : "") + (t.private ? " priv" : "");
+    const home = !t.url || isHome(t.url);
+    const h = home ? (t.private ? "Onglet privé" : "Nouvel onglet") : host(t.url);
+    el.innerHTML = (t.private ? ICONS.mask.replace("<svg", '<svg class="pv"')
+                  : home ? '<img src="logo.png" alt="">'
+                  : t.loading ? '<div class="spin"></div>'
+                  : `<img src="${fav(t.url)}" onerror="this.style.visibility='hidden'">`)
+                 + `<span class="title"></span><button class="x" title="Fermer">${ICONS.close}</button>`;
+    el.querySelector(".title").textContent = h;
+    el.title = h;
+    el.onclick = () => activate(t.id);
+    el.querySelector(".x").onclick = (e) => { e.stopPropagation(); closeTab(t.id); };
+    el.onauxclick = (e) => { if (e.button === 1 && !t.pinned) closeTab(t.id); };
+    el.oncontextmenu = (e) => { e.preventDefault(); openCtx(e.clientX, e.clientY, tabMenu(t)); };
+    return el;
+  }
+
+  function lazyTab(url, pinned) {
+    const t = { id: --lazySeq, url: url || "", loading: false, pinned: !!pinned, private: false, lazy: true, pending: null };
+    if (t.pinned) tabs.splice(tabs.filter((x) => x.pinned).length, 0, t);
+    else tabs.push(t);
+    return t;
+  }
+
+  function materialize(t) {
+    if (!t.lazy) return Promise.resolve(t.id);
+    if (!t.pending) {
+      t.pending = invoke("new_tab", { url: t.url || null, private: false }).then((id) => {
+        const old = t.id;
+        t.id = id; t.lazy = false; t.loading = true; t.pending = null;
+        if (activeId === old) activeId = id;
+        return id;
+      }, (e) => { t.pending = null; throw e; });
+    }
+    return t.pending;
+  }
+
+  function render() {
+    const wrap = $("#tabs");
+    const ordered = [];
+    for (const t of tabs) {
+      const sig = tabSig(t);
+      let rec = tabCache.get(t);
+      if (!rec || rec.sig !== sig) { rec = { el: buildTab(t), sig }; tabCache.set(t, rec); }
+      ordered.push(rec.el);
+    }
+    const kids = wrap.children;
+    let same = kids.length === ordered.length + 1 && kids[ordered.length] === plusBtn;
+    for (let i = 0; same && i < ordered.length; i++) if (kids[i] !== ordered[i]) same = false;
+    if (!same) wrap.replaceChildren(...ordered, plusBtn);
+
+    const cur = tabs.find((t) => t.id === activeId);
+    if (cur && document.activeElement !== urlInput) urlInput.value = isHome(cur.url) || isBlank(cur.url) ? "" : pretty(cur.url);
+    $("#lock").style.opacity = cur && cur.url.startsWith("https://") ? 1 : .35;
+    const onHome = !!cur && (!cur.url || isHome(cur.url));
+    document.body.classList.toggle("home", onHome);
+    document.body.classList.toggle("home-ui", onHome);
+    const wantHome = onHome && cur.private ? "home.html?p=1" : "home.html";
+    const hf = $("#homeframe");
+    if (onHome && hf.getAttribute("src") !== wantHome) hf.setAttribute("src", wantHome);
+    const mode = cur ? (onHome ? "h" : "n") + cur.id : "";
+    if (cur && cur.lazy) {
+      lastMode = "";
+      if (!cur.pending && !settings && !afillOpen && overlays.size === 0) {
+        if (!onHome) invoke("hide_tabs_quiet").catch(() => {});
+        materialize(cur).then(() => { lastMode = ""; render(); }).catch(() => {});
+      }
+    } else if (cur && mode !== lastMode) {
+      lastMode = mode;
+      if (!settings && !afillOpen && overlays.size === 0) invoke(onHome ? "hide_all_tabs_cmd" : "switch_tab", onHome ? {} : { id: cur.id }).catch(() => {});
+    }
+    updateStar();
+    refreshKey();
+    saveSession();
+  }
+
+  let saveTimer = 0;
+  function saveSession() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      const list = tabs.filter((t) => !t.private);
+      const ai = list.findIndex((t) => t.id === activeId);
+      store.set("session", { tabs: list.map((t) => ({ url: isHome(t.url) ? "" : t.url, pinned: !!t.pinned })), active: Math.max(0, ai) });
+    }, 400);
+  }
+
+  async function newTab(url, opts = {}) {
+    const priv = !!opts.private;
+    const id = await invoke("new_tab", { url: url ?? null, private: priv });
+    const t = { id, url: url ?? "", loading: true, pinned: !!opts.pinned, private: priv };
+    if (t.pinned) tabs.splice(tabs.filter((x) => x.pinned).length, 0, t);
+    else tabs.push(t);
+    activeId = id;
+    lastMode = "";
+    render();
+    if ((!url || isBlank(url)) && !opts.quiet) { urlInput.value = ""; urlInput.focus(); }
+    return id;
+  }
+
+  function setPinned(id, on) {
+    const t = tabs.find((x) => x.id === id);
+    if (!t) return;
+    t.pinned = on;
+    tabs = tabs.filter((x) => x.pinned).concat(tabs.filter((x) => !x.pinned));
+    render();
+  }
+
+  function tabMenu(t) {
+    const items = [
+      [t.pinned ? "Désépingler l’onglet" : "Épingler l’onglet", () => setPinned(t.id, !t.pinned)],
+      ["Dupliquer", () => newTab(isHome(t.url) ? undefined : t.url, { private: t.private })],
+      ["Recharger", () => t.lazy || invoke("reload", { id: t.id })],
+      null,
+      ["Fermer l’onglet", () => closeTab(t.id)],
+    ];
+    if (tabs.length > 1) items.push(["Fermer les autres onglets", async () => { for (const o of tabs.slice()) if (o.id !== t.id && !o.pinned) await closeTab(o.id); }]);
+    return items;
+  }
+
+  function lockNative(name, on) {
+    const had = overlays.size > 0;
+    if (on) overlays.add(name); else overlays.delete(name);
+    if (!had && overlays.size > 0) {
+      const ae = document.activeElement;
+      invoke("hide_tabs_quiet").catch(() => {}).then(() => {
+        if (ae && ae !== document.activeElement && document.contains(ae) && overlays.size > 0) ae.focus();
+      });
+    }
+    if (had && overlays.size === 0) { lastMode = ""; render(); }
+  }
+
+  function closeCtx() {
+    const c = $("#ctx");
+    if (!c.classList.contains("open")) return;
+    c.classList.remove("open");
+    lockNative("ctx", false);
+  }
+  function openCtx(x, y, items) {
+    const c = $("#ctx");
+    c.innerHTML = "";
+    for (const it of items) {
+      if (!it) { c.appendChild(document.createElement("hr")); continue; }
+      const b = document.createElement("button");
+      b.textContent = it[0];
+      b.onmousedown = (e) => e.stopPropagation();
+      b.onclick = () => { closeCtx(); it[1](); };
+      c.appendChild(b);
+    }
+    c.classList.add("open");
+    const r = c.getBoundingClientRect();
+    c.style.left = Math.max(6, Math.min(x, innerWidth - r.width - 6)) + "px";
+    c.style.top = Math.max(6, Math.min(y, innerHeight - r.height - 6)) + "px";
+    lockNative("ctx", true);
+  }
+  window.addEventListener("mousedown", (e) => { if (!e.target.closest("#ctx")) closeCtx(); }, true);
+  window.addEventListener("contextmenu", (e) => { if (!e.target.closest("input, textarea")) e.preventDefault(); });
+  window.addEventListener("blur", closeCtx);
+
+  async function reopenTab() {
+    const c = closedStack.pop();
+    if (c) await newTab(c.url || undefined, { pinned: c.pinned });
+  }
+
+  async function activate(id) {
+    activeId = id;
+    lastMode = "";
+    render();
+  }
+
+  async function closeTab(id) {
+    const gone = tabs.find((t) => t.id === id);
+    if (!gone) return;
+    if (!gone.private && !isHome(gone.url)) { closedStack.push({ url: gone.url, pinned: gone.pinned }); if (closedStack.length > 20) closedStack.shift(); }
+    if (gone.pending) { try { await gone.pending; } catch {} }
+    if (!gone.lazy) await invoke("close_tab", { id: gone.id });
+    const i = tabs.indexOf(gone);
+    if (i < 0) return;
+    tabs.splice(i, 1);
+    if (tabs.length === 0) return userTab();
+    if (activeId === gone.id) await activate(tabs[Math.min(i, tabs.length - 1)].id);
+    else render();
+  }
+
+  const baseName = (p) => String(p || "").split(/[\\/]/).pop();
+  downloads.forEach((d) => { if (d.state === "progress") d.state = "fail"; });
+  listen("download-started", ({ payload }) => {
+    downloads.unshift({ url: payload.url, path: payload.path, name: baseName(payload.path), state: "progress", t: Date.now() });
+    downloads = downloads.slice(0, 50);
+    store.set("downloads", downloads);
+    if (!panel && !settings) togglePanel({ kind: "downloads" });
+    else if (panel && panel.kind === "downloads") renderPanel();
+    renderRail();
+  });
+  listen("download-done", ({ payload }) => {
+    const d = downloads.find((x) => x.url === payload.url && x.state === "progress");
+    if (d) {
+      d.state = payload.success ? "done" : "fail";
+      if (payload.path) { d.path = payload.path; d.name = baseName(payload.path); }
+    }
+    store.set("downloads", downloads);
+    if (panel && panel.kind === "downloads") renderPanel();
+    renderRail();
+  });
+
+  let sugItems = [];
+  let sugIdx = -1;
+  let sugQuery = "";
+  const looksUrl = (q) => /^(https?|file):\/\//i.test(q) || (!/\s/.test(q) && (q.includes(".") || /^localhost/i.test(q)));
+  function closeSug() {
+    const el = $("#sug");
+    if (!el.classList.contains("open")) return;
+    el.classList.remove("open");
+    sugIdx = -1;
+    lockNative("sug", false);
+  }
+  function paintSug() {
+    const el = $("#sug");
+    el.innerHTML = "";
+    sugItems.forEach((it, i) => {
+      const row = document.createElement("div");
+      row.className = "sg" + (i === sugIdx ? " on" : "");
+      row.innerHTML = it.kind === "go"
+        ? `<span class="ico">${looksUrl(sugQuery) ? ICONS.lockc : ICONS.search}</span><div class="t"><b></b></div>`
+        : `<img src="${fav(it.url)}" onerror="this.style.visibility='hidden'"><div class="t"><b></b><small></small></div><span class="k"></span>`;
+      row.querySelector("b").textContent = it.title;
+      if (it.kind !== "go") { row.querySelector("small").textContent = pretty(it.url); row.querySelector(".k").textContent = it.tag; }
+      row.onmousedown = (e) => { e.preventDefault(); chooseSug(i); };
+      el.appendChild(row);
+    });
+  }
+  function refreshSug() {
+    sugQuery = urlInput.value.trim();
+    if (!sugQuery || document.activeElement !== urlInput) return closeSug();
+    const tokens = sugQuery.toLowerCase().split(/\s+/);
+    const seen = new Set();
+    const found = [];
+    const take = (e, tag) => {
+      if (seen.has(e.url)) return;
+      const hay = (e.url + " " + (e.title || "")).toLowerCase();
+      if (tokens.every((t) => hay.includes(t))) { seen.add(e.url); found.push({ kind: "entry", url: e.url, title: e.title || host(e.url), tag }); }
+    };
+    for (let i = 0; i < bookmarks.length && found.length < 6; i++) take(bookmarks[i], "Favori");
+    for (let i = history.length - 1; i >= 0 && found.length < 6; i--) take(history[i], "Historique");
+    sugItems = [{ kind: "go", url: TX.resolve(sugQuery), title: looksUrl(sugQuery) ? "Aller à " + sugQuery : "Rechercher « " + sugQuery + " » avec " + TX.engineName() }].concat(found);
+    sugIdx = -1;
+    paintSug();
+    const r = $("#urlwrap").getBoundingClientRect();
+    const el = $("#sug");
+    el.style.left = r.left + "px";
+    el.style.top = r.bottom + 6 + "px";
+    el.style.width = r.width + "px";
+    el.classList.add("open");
+    lockNative("sug", true);
+  }
+  function chooseSug(i) {
+    const it = sugItems[i];
+    if (!it || activeId === null) return;
+    closeSug();
+    urlInput.blur();
+    invoke("navigate", { id: activeId, url: it.url });
+  }
+  urlInput.addEventListener("input", refreshSug);
+  urlInput.addEventListener("blur", closeSug);
+  urlInput.addEventListener("keydown", (e) => {
+    if (!$("#sug").classList.contains("open")) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      sugIdx = (sugIdx + (e.key === "ArrowDown" ? 1 : -1) + sugItems.length + 1) % (sugItems.length + 1) - 1;
+      urlInput.value = sugIdx <= 0 ? sugQuery : sugItems[sugIdx].url;
+      paintSug();
+    }
+    if (e.key === "Escape") closeSug();
+  });
+
+  const prettyKey = (c) => c.split("+").map((p) => ({ ctrl: "Ctrl", shift: "Maj", alt: "Alt", arrowleft: "←", arrowright: "→", arrowup: "↑", arrowdown: "↓", tab: "Tab" }[p] || (p.length === 1 ? p.toUpperCase() : p.toUpperCase()))).join(" + ");
+  const normCombo = (e) => {
+    const k = e.key;
+    if (!k || k === "Control" || k === "Shift" || k === "Alt" || k === "Meta") return "";
+    const parts = [];
+    if (e.ctrlKey || e.metaKey) parts.push("ctrl");
+    if (e.altKey) parts.push("alt");
+    if (e.shiftKey) parts.push("shift");
+    parts.push(k.toLowerCase());
+    return parts.join("+");
+  };
+  const curTab = () => tabs.find((t) => t.id === activeId);
+  const cycleTab = (d) => { const i = tabs.findIndex((t) => t.id === activeId); if (i >= 0 && tabs.length > 1) activate(tabs[(i + d + tabs.length) % tabs.length].id); };
+  function runReader() {
+    const t = curTab();
+    if (t && /^https?:/.test(t.url) && !isHome(t.url)) invoke("reader_mode", { id: t.id }).catch(() => {});
+  }
+  const ACTIONS = [
+    { id: "newtab", label: "Nouvel onglet", defs: ["ctrl+t"], run: () => userTab() },
+    { id: "private", label: "Nouvel onglet privé", defs: ["ctrl+shift+n"], run: () => userTab({ private: true }) },
+    { id: "close", label: "Fermer l’onglet", defs: ["ctrl+w"], run: () => activeId !== null && closeTab(activeId) },
+    { id: "reopen", label: "Rouvrir l’onglet fermé", defs: ["ctrl+shift+t"], run: reopenTab },
+    { id: "next", label: "Onglet suivant", defs: ["ctrl+tab"], run: () => cycleTab(1) },
+    { id: "prev", label: "Onglet précédent", defs: ["ctrl+shift+tab"], run: () => cycleTab(-1) },
+    { id: "addr", label: "Barre d’adresse", defs: ["ctrl+l"], run: () => urlInput.focus() },
+    { id: "fav", label: "Ajouter aux favoris", defs: ["ctrl+d"], run: toggleBookmark },
+    { id: "find", label: "Rechercher dans la page", defs: ["ctrl+f"], run: () => { const t = curTab(); if (t && !isHome(t.url)) invoke("find_in_page", { id: t.id }); } },
+    { id: "reload", label: "Recharger", defs: ["ctrl+r", "f5"], run: () => activeId !== null && invoke("reload", { id: activeId }) },
+    { id: "back", label: "Page précédente", defs: ["alt+arrowleft"], run: () => activeId !== null && invoke("go_back", { id: activeId }) },
+    { id: "forward", label: "Page suivante", defs: ["alt+arrowright"], run: () => activeId !== null && invoke("go_forward", { id: activeId }) },
+    { id: "history", label: "Historique", defs: ["ctrl+h"], run: () => togglePanel({ kind: "history" }) },
+    { id: "downloads", label: "Téléchargements", defs: ["ctrl+j"], run: () => togglePanel({ kind: "downloads" }) },
+    { id: "reader", label: "Mode lecture", defs: ["alt+r"], run: runReader },
+    { id: "zen", label: "Page en grand", defs: ["ctrl+shift+f"], run: () => $("#zen").click() },
+    { id: "settings", label: "Réglages", defs: ["ctrl+,"], run: () => (settings ? closeSettings() : openSettings()) },
+  ];
+  const combosOf = (a) => { const c = store.get("keys", {})[a.id]; return Array.isArray(c) && c.length ? c : a.defs; };
+  const keyMap = () => { const m = new Map(); for (const a of ACTIONS) for (const c of combosOf(a)) m.set(c, a); return m; };
+  const NUMKEYS = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => "ctrl+" + n);
+  const allCombos = () => [...keyMap().keys(), ...NUMKEYS];
+  const syncShortcuts = () => invoke("set_shortcuts", { keys: allCombos() }).catch(() => {});
+  let recording = null;
+  let recError = "";
+  window.TWKEYS = { has: (c) => keyMap().has(c) || NUMKEYS.includes(c) };
+  window.runCombo = (combo) => {
+    if (recording) return false;
+    const a = keyMap().get(combo);
+    if (settings || afillOpen) { if (a && a.id === "settings") { a.run(); return true; } return false; }
+    if (NUMKEYS.includes(combo)) {
+      const n = +combo.slice(5);
+      const t = n === 9 ? tabs[tabs.length - 1] : tabs[n - 1];
+      if (t) activate(t.id);
+      return true;
+    }
+    if (a) { a.run(); return true; }
+    return false;
+  };
+  listen("page-key", ({ payload }) => window.runCombo(payload));
+  function handleRecord(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === "Escape") { recording = null; recError = ""; return renderSettings(); }
+    const combo = normCombo(e);
+    if (!combo) return;
+    const hasMod = e.ctrlKey || e.metaKey || e.altKey || /^f\d+$/.test(combo);
+    if (!hasMod) { recError = "Ajoute Ctrl, Alt ou utilise une touche F."; return renderSettings(); }
+    const other = keyMap().get(combo);
+    if (other && other.id !== recording) { recError = "Déjà utilisé par « " + other.label + " »."; return renderSettings(); }
+    const keys = store.get("keys", {});
+    keys[recording] = [combo];
+    store.set("keys", keys);
+    recording = null;
+    recError = "";
+    syncShortcuts();
+    renderSettings();
+  }
+
+  listen("zen-enter", () => { if (zenMode && !zenHidden) setZen(true, null); });
+  listen("zen-exit", () => { if (zenMode && zenHidden) setZen(false, null); });
+
+  window.addEventListener("message", (e) => {
+    if (e.source !== $("#homeframe").contentWindow) return;
+    const u = e.data && e.data.tweaxGo;
+    if (typeof u === "string" && /^(https?|file):/i.test(u) && activeId !== null) invoke("navigate", { id: activeId, url: u });
+  });
+
+  listen("tab-updated", ({ payload }) => {
+    const t = tabs.find((x) => x.id === payload.id);
+    if (!t) return;
+    t.url = payload.url;
+    t.loading = payload.loading;
+    if (!payload.loading && !t.private && /^https?:/.test(t.url) && !isHome(t.url) && (!history.length || history[history.length - 1].url !== t.url)) {
+      history.push({ url: t.url, title: host(t.url), t: Date.now() });
+      if (history.length > 300) history = history.slice(-300);
+      store.set("history", history);
+      if (panel && panel.kind === "history") renderPanel();
+    }
+    render();
+  });
+
+  urlInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && activeId !== null) {
+      const target = TX.resolve(urlInput.value);
+      if (target) invoke("navigate", { id: activeId, url: target });
+      else invoke("go_home", { id: activeId });
+      urlInput.blur();
+    }
+    if (e.key === "Escape") urlInput.blur();
+  });
+  urlInput.addEventListener("focus", () => {
+    const cur = tabs.find((t) => t.id === activeId);
+    if (cur) urlInput.value = isHome(cur.url) || isBlank(cur.url) ? "" : cur.url;
+    urlInput.select();
+  });
+  urlInput.addEventListener("blur", render);
+
+  $("#back").onclick = () => activeId && invoke("go_back", { id: activeId });
+  $("#fwd").onclick = () => activeId && invoke("go_forward", { id: activeId });
+  $("#reload").onclick = () => activeId && invoke("reload", { id: activeId });
+  $("#star").onclick = toggleBookmark;
+  $("#reader").onclick = runReader;
+  $("#key").onclick = openAutofill;
+  $("#afill").addEventListener("mousedown", (e) => { if (e.target.id === "afill") closeAutofill(); });
+  listen("new-window", ({ payload }) => { if (/^https?:/i.test(payload)) newTab(payload); });
+
+  function toggleBookmark() {
+    const cur = tabs.find((t) => t.id === activeId);
+    if (!cur || !/^https?:/.test(cur.url) || isHome(cur.url)) return;
+    const i = bookmarks.findIndex((b) => b.url === cur.url);
+    if (i >= 0) bookmarks.splice(i, 1);
+    else bookmarks.push({ url: cur.url, title: host(cur.url) });
+    store.set("bookmarks", bookmarks);
+    updateStar();
+    if (panel && panel.kind === "bookmarks") renderPanel();
+  }
+
+  $("#mclose").innerHTML = ICONS.close;
+  $("#mclose").onclick = closeSettings;
+  $("#overlay").addEventListener("mousedown", (e) => { if (e.target.id === "overlay") closeSettings(); });
+
+  window.addEventListener("keydown", (e) => {
+    if (recording) return handleRecord(e);
+    if (e.key === "Escape") closeCtx();
+    if (e.key === "Escape" && afillOpen) { e.preventDefault(); return closeAutofill(); }
+    if (e.key === "Escape" && settings) { e.preventDefault(); return closeSettings(); }
+    const combo = normCombo(e);
+    if (combo && window.TWKEYS.has(combo) && window.runCombo(combo)) e.preventDefault();
+  }, true);
+
+  $("#wmin").onclick = () => invoke("win_minimize");
+  $("#wmax").onclick = () => invoke("win_toggle_max");
+  $("#wclose").onclick = () => invoke("win_close");
+  const dragZone = (e) => e.target.id === "tabs" || e.target.id === "top";
+  $("#top").addEventListener("mousedown", (e) => { if (e.button === 0 && e.detail === 1 && dragZone(e)) invoke("win_drag"); });
+  $("#top").addEventListener("dblclick", (e) => { if (dragZone(e)) invoke("win_toggle_max"); });
+  window.addEventListener("storage", () => { theme = TX.getTheme(); applyTheme(); });
+
+  async function boot() {
+    applyTheme();
+    renderRail();
+    await Promise.all([
+      invoke("set_profile", { id: TX.activeProfile() }).catch(() => {}),
+      adblockSync(),
+      syncDownloads(),
+      invoke("set_clear_on_exit", { enabled: store.get("clearOnExit", false) }).catch(() => {}),
+      syncShortcuts(),
+    ]);
+    const sess = store.get("session", null);
+    if (store.get("restoreSession", true) && sess && Array.isArray(sess.tabs) && sess.tabs.length) {
+      for (const t of sess.tabs) lazyTab(t.url, t.pinned);
+      const target = tabs[Math.min(sess.active || 0, tabs.length - 1)];
+      if (target) activate(target.id);
+    } else {
+      userTab();
+    }
+    if (store.get("zenStart", false)) setZen(false, true);
+  }
+  boot();
+</script>
+</body>
+</html>

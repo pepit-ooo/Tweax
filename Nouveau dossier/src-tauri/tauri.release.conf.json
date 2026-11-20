@@ -1,0 +1,17 @@
+{
+  "bundle": {
+    "createUpdaterArtifacts": true,
+    "targets": ["nsis"]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZGNEVFRjVCRjY0QTc4OTcKUldTWGVFcjJXKzlPLyt2Y1d0anplUS9Nd1FUUzI5SFo0d0p5ZEdkeXg4Y0M0L3FIYWNlSDVoQlkK",
+      "endpoints": [
+        "https://github.com/pepit-ooo/Tweax/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}
