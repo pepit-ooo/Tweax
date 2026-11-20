@@ -3,9 +3,10 @@ mod vault;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use std::sync::Mutex;
+use std::path::{Path, PathBuf};
 
 use tauri::{State,
-    webview::{PageLoadEvent, WebviewBuilder},
+    webview::{DownloadEvent, PageLoadEvent, WebviewBuilder},
     window::WindowBuilder,
     AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Url, Webview, WebviewUrl,
     WindowEvent,
@@ -19,6 +20,84 @@ const ZEN_MS: f64 = 240.0;
 const HOME: &str = "https://www.google.com/";
 
 static NEXT_ID: AtomicU32 = AtomicU32::new(1);
+static ADBLOCK: AtomicBool = AtomicBool::new(false);
+static KEYS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+static ALLOW: Mutex<Vec<String>> = Mutex::new(Vec::new());
+static PROFILE: Mutex<String> = Mutex::new(String::new());
+static DL_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
+static DL_ASK: AtomicBool = AtomicBool::new(false);
+static CLEAR_ON_EXIT: AtomicBool = AtomicBool::new(false);
+
+const PAGE_JS: &str = include_str!("page.js");
+
+fn keys_snapshot() -> Vec<String> {
+    KEYS.lock().map(|k| k.clone()).unwrap_or_default()
+}
+
+fn allow_snapshot() -> Vec<String> {
+    ALLOW.lock().map(|k| k.clone()).unwrap_or_default()
+}
+
+fn valid_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 40 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+fn profile_id() -> String {
+    let p = PROFILE.lock().map(|p| p.clone()).unwrap_or_default();
+    if valid_id(&p) { p } else { "default".to_string() }
+}
+
+fn browsing_root(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_local_data_dir().ok().map(|d| d.join("browsing"))
+}
+
+fn profile_dir(app: &AppHandle) -> Option<PathBuf> {
+    let dir = browsing_root(app)?.join(profile_id());
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir)
+}
+
+fn clear_data(app: &AppHandle) {
+    for (label, wv) in app.webviews() {
+        if label.starts_with("tab-") || label.starts_with("panel-") {
+            let _ = wv.clear_all_browsing_data();
+            break;
+        }
+    }
+}
+
+fn page_script() -> String {
+    let cfg = serde_json::json!({
+        "adblock": ADBLOCK.load(Ordering::SeqCst),
+        "keys": keys_snapshot(),
+        "allow": allow_snapshot(),
+    });
+    format!("window.__TWEAX_CFG = {cfg};\n{PAGE_JS}")
+}
+
+fn unique_path(dir: &Path, name: &std::ffi::OsStr) -> PathBuf {
+    let first = dir.join(name);
+    if !first.exists() {
+        return first;
+    }
+    let stem = Path::new(name).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let ext = Path::new(name).extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+    let mut n = 1;
+    loop {
+        let candidate = dir.join(format!("{stem} ({n}){ext}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
+#[derive(Clone, serde::Serialize)]
+struct DownloadInfo {
+    url: String,
+    path: Option<String>,
+    success: Option<bool>,
+}
 static PANEL_OPEN: AtomicBool = AtomicBool::new(false);
 
 static ZEN: AtomicBool = AtomicBool::new(false);
@@ -45,6 +124,9 @@ fn normalize(input: &str) -> Url {
     let s = input.trim();
     if s.is_empty() {
         return Url::parse(HOME).unwrap();
+    }
+    if s == "about:blank" {
+        return Url::parse("about:blank").unwrap();
     }
     if s.starts_with("http://") || s.starts_with("https://") || s.starts_with("file://") {
         if let Ok(u) = Url::parse(s) {
@@ -193,7 +275,8 @@ fn watch_zen_edges(app: AppHandle) {
 }
 
 #[tauri::command]
-async fn new_tab(app: AppHandle, url: Option<String>) -> Result<u32, String> {
+async fn new_tab(app: AppHandle, url: Option<String>, private: Option<bool>) -> Result<u32, String> {
+    let private = private.unwrap_or(false);
     let window = app.get_window("main").ok_or("fenêtre introuvable")?;
     let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
     let url = url.unwrap_or_default();
@@ -211,7 +294,64 @@ async fn new_tab(app: AppHandle, url: Option<String>) -> Result<u32, String> {
 
     let handle = app.clone();
     let popup_handle = app.clone();
-    let builder = WebviewBuilder::new(format!("tab-{id}"), target)
+    let key_handle = app.clone();
+    let dl_handle = app.clone();
+    let mut builder = WebviewBuilder::new(format!("tab-{id}"), target)
+        .initialization_script(page_script())
+        .incognito(private)
+        .on_document_title_changed(move |_wv, title| {
+            if let Some(rest) = title.strip_prefix("\u{200b}tweax-key:") {
+                let combo = rest.rsplit_once(':').map(|(c, _)| c).unwrap_or(rest);
+                let _ = key_handle.emit("page-key", combo.to_string());
+            }
+        })
+        .on_download(move |_wv, event| {
+            match event {
+                DownloadEvent::Requested { url, destination } => {
+                    let name = destination
+                        .file_name()
+                        .map(|n| n.to_owned())
+                        .unwrap_or_else(|| "telechargement".into());
+                    let custom = DL_DIR.lock().ok().and_then(|d| d.clone()).filter(|d| d.is_dir());
+                    if let Some(dir) = custom.or_else(|| dl_handle.path().download_dir().ok()) {
+                        *destination = unique_path(&dir, &name);
+                    }
+                    if DL_ASK.load(Ordering::SeqCst) {
+                        let mut dialog = rfd::FileDialog::new().set_file_name(name.to_string_lossy().to_string());
+                        if let Some(dir) = destination.parent() {
+                            dialog = dialog.set_directory(dir);
+                        }
+                        if let Some(win) = dl_handle.get_window("main") {
+                            dialog = dialog.set_parent(&win);
+                        }
+                        match dialog.save_file() {
+                            Some(chosen) => *destination = chosen,
+                            None => return false,
+                        }
+                    }
+                    let _ = dl_handle.emit(
+                        "download-started",
+                        DownloadInfo {
+                            url: url.to_string(),
+                            path: Some(destination.to_string_lossy().into_owned()),
+                            success: None,
+                        },
+                    );
+                }
+                DownloadEvent::Finished { url, path, success } => {
+                    let _ = dl_handle.emit(
+                        "download-done",
+                        DownloadInfo {
+                            url: url.to_string(),
+                            path: path.map(|p| p.to_string_lossy().into_owned()),
+                            success: Some(success),
+                        },
+                    );
+                }
+                _ => {}
+            }
+            true
+        })
         .on_new_window(move |url, _features| {
             let _ = popup_handle.emit("new-window", url.to_string());
             tauri::webview::NewWindowResponse::Deny
@@ -245,6 +385,12 @@ async fn new_tab(app: AppHandle, url: Option<String>) -> Result<u32, String> {
             );
         });
 
+    if !private {
+        if let Some(dir) = profile_dir(&app) {
+            builder = builder.data_directory(dir);
+        }
+    }
+
     let wv = window
         .add_child(builder, LogicalPosition::new(x, y), LogicalSize::new(cw, ch))
         .map_err(|e| e.to_string())?;
@@ -265,11 +411,198 @@ async fn switch_tab(app: AppHandle, id: u32) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn set_adblock(app: AppHandle, enabled: bool, allow: Option<Vec<String>>) -> Result<(), String> {
+    ADBLOCK.store(enabled, Ordering::SeqCst);
+    let list: Vec<String> = allow
+        .unwrap_or_default()
+        .into_iter()
+        .map(|h| h.trim().to_lowercase())
+        .filter(|h| !h.is_empty() && h.len() <= 120 && h.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-'))
+        .take(200)
+        .collect();
+    let script = format!("window.__tweaxAllow = {};", serde_json::to_string(&list).map_err(|e| e.to_string())?);
+    if let Ok(mut a) = ALLOW.lock() {
+        *a = list;
+    }
+    for (label, wv) in app.webviews() {
+        if label.starts_with("tab-") {
+            let _ = wv.eval(&script);
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_profile(id: String) -> Result<(), String> {
+    if !valid_id(&id) {
+        return Err("profil invalide".into());
+    }
+    if let Ok(mut p) = PROFILE.lock() {
+        *p = id;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_profile_data(app: AppHandle, id: String) -> Result<(), String> {
+    if !valid_id(&id) || id == "default" || id == profile_id() {
+        return Err("profil invalide".into());
+    }
+    if let Some(root) = browsing_root(&app) {
+        let dir = root.join(&id);
+        if dir.is_dir() {
+            std::fs::remove_dir_all(dir).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_downloads(dir: Option<String>, ask: bool) -> Result<(), String> {
+    let path = dir.map(|d| d.trim().to_string()).filter(|d| !d.is_empty()).map(PathBuf::from);
+    if let Ok(mut d) = DL_DIR.lock() {
+        *d = path;
+    }
+    DL_ASK.store(ask, Ordering::SeqCst);
+    Ok(())
+}
+
+#[tauri::command]
+async fn pick_folder(app: AppHandle) -> Result<Option<String>, String> {
+    let mut dialog = rfd::AsyncFileDialog::new();
+    if let Some(win) = app.get_window("main") {
+        dialog = dialog.set_parent(&win);
+    }
+    Ok(dialog.pick_folder().await.map(|h| h.path().to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+async fn save_text_file(app: AppHandle, name: String, content: String) -> Result<String, String> {
+    let clean: String = name
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        .collect();
+    if clean.is_empty() || content.len() > 20_000_000 {
+        return Err("fichier invalide".into());
+    }
+    let custom = DL_DIR.lock().ok().and_then(|d| d.clone()).filter(|d| d.is_dir());
+    let dir = custom
+        .or_else(|| app.path().download_dir().ok())
+        .ok_or("dossier introuvable")?;
+    let target = unique_path(&dir, std::ffi::OsStr::new(&clean));
+    std::fs::write(&target, content).map_err(|e| e.to_string())?;
+    Ok(target.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+async fn clear_browsing_data(app: AppHandle) -> Result<(), String> {
+    for (label, wv) in app.webviews() {
+        if label.starts_with("tab-") || label.starts_with("panel-") {
+            return wv.clear_all_browsing_data().map_err(|e| e.to_string());
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_clear_on_exit(app: AppHandle, enabled: bool) -> Result<(), String> {
+    CLEAR_ON_EXIT.store(enabled, Ordering::SeqCst);
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let marker = dir.join("clear_on_exit");
+    if enabled {
+        std::fs::write(marker, b"1").map_err(|e| e.to_string())
+    } else if marker.exists() {
+        std::fs::remove_file(marker).map_err(|e| e.to_string())
+    } else {
+        Ok(())
+    }
+}
+
+#[tauri::command]
+async fn reader_mode(app: AppHandle, id: u32) -> Result<(), String> {
+    tab(&app, id)?
+        .eval("window.__tweaxReader && window.__tweaxReader.toggle()")
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn set_shortcuts(app: AppHandle, keys: Vec<String>) -> Result<(), String> {
+    let script = format!(
+        "window.__tweaxKeys = {};",
+        serde_json::to_string(&keys).map_err(|e| e.to_string())?
+    );
+    if let Ok(mut k) = KEYS.lock() {
+        *k = keys;
+    }
+    for (label, wv) in app.webviews() {
+        if label.starts_with("tab-") {
+            let _ = wv.eval(&script);
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn find_in_page(app: AppHandle, id: u32) -> Result<(), String> {
+    tab(&app, id)?
+        .eval("window.__tweaxFind && window.__tweaxFind.open()")
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn reveal_path(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(format!("/select,{}", path.replace('/', "\\")))
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open").args(["-R", &path]).spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        let dir = Path::new(&path).parent().map(|p| p.to_path_buf()).unwrap_or_else(|| PathBuf::from("."));
+        std::process::Command::new("xdg-open").arg(dir).spawn().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn open_path(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", &path])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open").arg(&path).spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open").arg(&path).spawn().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 async fn hide_all_tabs_cmd(app: AppHandle) -> Result<(), String> {
     hide_all_tabs(&app);
     if let Some(ui) = app.get_webview("ui") {
         let _ = ui.set_focus();
     }
+    Ok(())
+}
+
+#[tauri::command]
+async fn hide_tabs_quiet(app: AppHandle) -> Result<(), String> {
+    hide_all_tabs(&app);
     Ok(())
 }
 
@@ -332,6 +665,9 @@ async fn win_toggle_max(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 async fn win_close(app: AppHandle) -> Result<(), String> {
+    if CLEAR_ON_EXIT.load(Ordering::SeqCst) {
+        clear_data(&app);
+    }
     app.exit(0);
     Ok(())
 }
@@ -346,7 +682,7 @@ async fn set_tint(app: AppHandle, dark: bool) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         use tauri::window::{Color, Effect, EffectsBuilder};
-        let color = if dark { Color(0, 0, 0, 78) } else { Color(255, 255, 255, 225) };
+        let color = if dark { Color(0, 0, 0, 24) } else { Color(255, 255, 255, 70) };
         main_window(&app)?
             .set_effects(EffectsBuilder::new().effect(Effect::Acrylic).color(color).build())
             .map_err(|e| e.to_string())?;
@@ -425,7 +761,13 @@ async fn show_web_panel(app: AppHandle, key: String, url: String) -> Result<(), 
         let r = panel_rect(h);
         window
             .add_child(
-                WebviewBuilder::new(label, WebviewUrl::External(normalize(&url))),
+                {
+                    let mut b = WebviewBuilder::new(label, WebviewUrl::External(normalize(&url)));
+                    if let Some(dir) = profile_dir(&app) {
+                        b = b.data_directory(dir);
+                    }
+                    b
+                },
                 LogicalPosition::new(r.0, r.1),
                 LogicalSize::new(r.2, r.3),
             )
@@ -597,6 +939,12 @@ pub fn run() {
 
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
+            if dir.join("clear_on_exit").exists() {
+                CLEAR_ON_EXIT.store(true, Ordering::SeqCst);
+                if let Some(root) = browsing_root(app.handle()) {
+                    let _ = std::fs::remove_dir_all(root);
+                }
+            }
             app.manage(VaultState(Mutex::new(vault::Vault::new(dir.join("vault.bin")))));
 
             let mut builder = WindowBuilder::new(app, "main")
@@ -626,14 +974,34 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let WindowEvent::Resized(_) = event {
-                layout(window.app_handle());
+            match event {
+                WindowEvent::Resized(_) => layout(window.app_handle()),
+                WindowEvent::CloseRequested { .. } => {
+                    if CLEAR_ON_EXIT.load(Ordering::SeqCst) {
+                        clear_data(window.app_handle());
+                    }
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
             new_tab,
             switch_tab,
             hide_all_tabs_cmd,
+            hide_tabs_quiet,
+            set_adblock,
+            set_profile,
+            delete_profile_data,
+            set_downloads,
+            pick_folder,
+            save_text_file,
+            clear_browsing_data,
+            set_clear_on_exit,
+            reader_mode,
+            set_shortcuts,
+            find_in_page,
+            reveal_path,
+            open_path,
             close_tab,
             navigate,
             go_back,
