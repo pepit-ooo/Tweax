@@ -106,7 +106,7 @@
   const { store } = TX;
   const $ = (s) => document.querySelector(s);
 
-  function applyTheme() { document.documentElement.dataset.theme = TX.getTheme(); TX.applyAccent(); }
+  function applyTheme() { const m = TX.getTheme(); document.documentElement.dataset.theme = m; TX.applyTint(m); TX.applyAccent(); }
   function applyEngine() { $("#q").placeholder = "Rechercher avec " + TX.engineName() + " ou saisir une adresse"; }
 
   function tick() {

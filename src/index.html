@@ -133,6 +133,31 @@
   .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
   .sw.on { background: var(--accent); }
   .sw.on::after { transform: translateX(16px); background: var(--onaccent); }
+  #rail, #top { background-image: linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,0) 55%); box-shadow: inset 0 1px 0 rgba(255,255,255,.10), inset -1px 0 0 rgba(255,255,255,.05); }
+  html.tl body::before { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0; background: radial-gradient(1100px 560px at 6% -8%, rgba(255,255,255,.10), transparent 62%), radial-gradient(900px 520px at 100% 112%, var(--tint-glow, rgba(255,255,255,.05)), transparent 62%); }
+  .ri.fold { background: var(--glass2); }
+  .fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; width: 24px; height: 24px; }
+  .fgrid img { width: 10.5px; height: 10.5px; border-radius: 3px; }
+  .ri.dragging { opacity: .3; }
+  .ri.ghost { position: fixed; z-index: 900; pointer-events: none; background: var(--card); box-shadow: 0 10px 28px rgba(0,0,0,.45); transform: scale(1.1); }
+  .ri.drop-before { box-shadow: 0 -4px 0 0 var(--accent); }
+  .ri.drop-after { box-shadow: 0 4px 0 0 var(--accent); }
+  .ri.drop-into { background: var(--glass2); box-shadow: 0 0 0 2px var(--accent); }
+  body.rail-dragging, body.rail-dragging * { cursor: grabbing !important; }
+  #fly { display: none; position: fixed; z-index: 485; width: 230px; padding: 8px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); backdrop-filter: blur(32px) saturate(1.6); -webkit-backdrop-filter: blur(32px) saturate(1.6); box-shadow: 0 18px 50px rgba(0,0,0,.35); }
+  #fly.open { display: block; }
+  #fly h4 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 4px 8px 6px; }
+  #fly .fi { display: flex; align-items: center; gap: 10px; width: 100%; height: 36px; padding: 0 8px; border: 0; border-radius: 9px; background: none; color: var(--text); cursor: pointer; text-align: left; }
+  #fly .fi:hover { background: var(--hover); }
+  #fly .fi img { width: 18px; height: 18px; border-radius: 5px; flex: none; }
+  #fly .fi span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #fly .empty { padding: 10px 8px; color: var(--muted); font-size: 12.5px; }
+  .tintrow { display: flex; flex-wrap: wrap; gap: 12px; padding: 4px 2px; align-items: center; }
+  .swc.custom { position: relative; overflow: hidden; background: conic-gradient(#f43, #fb0, #4d4, #0cf, #84f, #f4a, #f43); }
+  .swc.custom input { position: absolute; inset: -6px; width: 44px; height: 44px; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+  .swc.none { background: linear-gradient(135deg, #fff 50%, #000 50%); }
+  .rng { width: 100%; accent-color: var(--accent); }
+  .rnglab { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; padding: 0 2px; }
   .ri.active::before { content: ""; position: absolute; left: -9px; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
   .ri img { width: 22px; height: 22px; border-radius: 6px; }
   .ri .ph { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; background: var(--accent); color: var(--onaccent); font-weight: 700; font-size: 12px; }
@@ -319,6 +344,7 @@
   </div>
 
   <div id="ctx"></div>
+  <div id="fly"></div>
   <div id="sug"></div>
 
   <aside id="panel"><div id="pbody"></div></aside>
@@ -411,10 +437,13 @@
   const translucent = /Windows/i.test(navigator.userAgent);
   const applyTheme = () => {
     document.documentElement.dataset.theme = theme;
+    const win = TX.applyTint(theme);
     TX.applyAccent();
     document.documentElement.classList.toggle("tl", translucent);
-    invoke("set_tint", { dark: theme === "noir" }).catch(() => {});
+    clearTimeout(tintTimer);
+    tintTimer = setTimeout(() => invoke("set_tint", { dark: theme === "noir", tint: translucent ? win : null }).catch(() => {}), 60);
   };
+  let tintTimer = null;
 
   function renderRail() {
     const rail = $("#rail");
@@ -437,7 +466,34 @@
     rail.insertAdjacentHTML("beforeend", '<div class="sep"></div>');
 
     for (const a of sidebarApps) {
-      const b = mk(`<img src="${fav(a.url)}" alt="">`, a.name, is("web", a.key), () => togglePanel({ kind: "web", key: a.key }));
+      if (a.folder) {
+        const cells = a.items.slice(0, 4).map((x) => `<img src="${fav(x.url)}" alt="" onerror="this.style.visibility='hidden'">`).join("");
+        const fb = mk(a.items.length ? `<div class="fgrid">${cells}</div>` : ICON_FOLDER, a.name, false, () => { if (!dragJustEnded) openFly(a, fb); }, "fold");
+        fb.dataset.sk = a.key; fb.dataset.fk = "1";
+        railDrag(fb, a.key);
+        fb.oncontextmenu = (e) => {
+          e.preventDefault();
+          openCtx(e.clientX, e.clientY, [
+            ["Ouvrir tout dans des onglets", async () => { for (const x of a.items) await newTab(x.url); }],
+            ["Renommer le dossier…", () => openSettings("sidebar")],
+            ["Dissoudre le dossier", () => { const i = sidebarApps.findIndex((x) => x.key === a.key); if (i >= 0) { sidebarApps.splice(i, 1, ...a.items); saveSide(); renderRail(); } }],
+            null,
+            ["Supprimer le dossier", () => { sidebarApps = sidebarApps.filter((x) => x.key !== a.key); saveSide(); renderRail(); }],
+          ]);
+        };
+        continue;
+      }
+      const b = mk(`<img src="${fav(a.url)}" alt="">`, a.name, false, () => { if (!dragJustEnded) openSidebarApp(a); });
+      b.dataset.sk = a.key;
+      railDrag(b, a.key);
+      b.oncontextmenu = (e) => {
+        e.preventDefault();
+        openCtx(e.clientX, e.clientY, [
+          ["Ouvrir dans un nouvel onglet", () => openSidebarApp(a)],
+          null,
+          ["Retirer de la barre latérale", () => removeSideApp(a.key)],
+        ]);
+      };
       b.querySelector("img").onerror = function () {
         this.replaceWith(Object.assign(document.createElement("div"), { className: "ph", textContent: a.name[0].toUpperCase() }));
       };
@@ -450,6 +506,162 @@
     }
     const gb = mk(ICONS.gear, "Réglages (Ctrl+,)", !!settings, () => (settings ? closeSettings() : openSettings()));
     if (upd.state === "available" || upd.state === "downloading") { gb.classList.add("has-upd"); gb.title = "Réglages — mise à jour disponible"; }
+  }
+
+  const ICON_FOLDER = '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+  const saveSide = () => store.set("sidebarApps", sidebarApps);
+  let dragJustEnded = false;
+  let flyKey = null;
+
+  const findSideApp = (key) => {
+    const i = sidebarApps.findIndex((x) => x.key === key);
+    if (i >= 0) return { list: sidebarApps, idx: i, folder: null };
+    for (const f of sidebarApps) {
+      if (!f.folder) continue;
+      const j = f.items.findIndex((x) => x.key === key);
+      if (j >= 0) return { list: f.items, idx: j, folder: f };
+    }
+    return null;
+  };
+  function removeSideApp(key) {
+    const loc = findSideApp(key);
+    if (!loc) return;
+    loc.list.splice(loc.idx, 1);
+    saveSide(); closeFly(); renderRail();
+    if (settings) renderSettings();
+  }
+
+  async function openSidebarApp(a) {
+    closeFly();
+    if (settings) await closeSettings();
+    await newTab(a.url);
+  }
+
+  function closeFly() {
+    const f = $("#fly");
+    if (!f.classList.contains("open")) return;
+    f.classList.remove("open");
+    flyKey = null;
+    lockNative("fly", false);
+  }
+  function openFly(folder, anchor) {
+    if (flyKey === folder.key) return closeFly();
+    const f = $("#fly");
+    f.innerHTML = "";
+    const h = document.createElement("h4");
+    h.textContent = folder.name;
+    f.appendChild(h);
+    if (!folder.items.length) f.insertAdjacentHTML("beforeend", '<div class="empty">Dossier vide. Glisse un site dessus pour l’ajouter.</div>');
+    for (const x of folder.items) {
+      const b = document.createElement("button");
+      b.className = "fi";
+      b.innerHTML = `<img src="${fav(x.url)}" alt="" onerror="this.style.visibility='hidden'"><span></span>`;
+      b.querySelector("span").textContent = x.name;
+      b.onmousedown = (e) => e.stopPropagation();
+      b.onclick = () => openSidebarApp(x);
+      b.oncontextmenu = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openCtx(e.clientX, e.clientY, [
+          ["Ouvrir dans un nouvel onglet", () => openSidebarApp(x)],
+          ["Sortir du dossier", () => {
+            const i = sidebarApps.findIndex((y) => y.key === folder.key);
+            const j = folder.items.findIndex((y) => y.key === x.key);
+            if (i < 0 || j < 0) return;
+            folder.items.splice(j, 1);
+            sidebarApps.splice(i + 1, 0, x);
+            saveSide(); closeFly(); renderRail();
+          }],
+          null,
+          ["Retirer de la barre latérale", () => removeSideApp(x.key)],
+        ]);
+      };
+      f.appendChild(b);
+    }
+    const r = anchor.getBoundingClientRect();
+    f.classList.add("open");
+    const fr = f.getBoundingClientRect();
+    f.style.left = (r.right + 10) + "px";
+    f.style.top = Math.max(8, Math.min(r.top, innerHeight - fr.height - 8)) + "px";
+    flyKey = folder.key;
+    lockNative("fly", true);
+  }
+  window.addEventListener("mousedown", (e) => { if (!e.target.closest("#fly, #ctx, .ri.fold")) closeFly(); }, true);
+  window.addEventListener("blur", closeFly);
+
+  function applyDrop(dragKey, targetKey, mode) {
+    const di = sidebarApps.findIndex((x) => x.key === dragKey);
+    const ti = sidebarApps.findIndex((x) => x.key === targetKey);
+    if (di < 0 || ti < 0 || di === ti) return;
+    const d = sidebarApps[di], t = sidebarApps[ti];
+    if (mode === "into" && !d.folder) {
+      if (t.folder) {
+        if (t.items.length >= 40) return;
+        t.items.push(d);
+        sidebarApps.splice(di, 1);
+      } else {
+        sidebarApps[ti] = { key: "f" + Date.now(), name: "Dossier", folder: true, items: [t, d] };
+        sidebarApps.splice(di, 1);
+      }
+    } else {
+      sidebarApps.splice(di, 1);
+      const at = sidebarApps.findIndex((x) => x.key === targetKey);
+      sidebarApps.splice(mode === "after" ? at + 1 : at, 0, d);
+    }
+    saveSide(); closeFly(); renderRail();
+  }
+
+  function railDrag(btn, key) {
+    btn.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      const sx = e.clientX, sy = e.clientY;
+      let ghost = null, over = null, mode = null;
+      const items = () => [...document.querySelectorAll("#rail .ri[data-sk]")];
+      const clear = () => items().forEach((i) => i.classList.remove("drop-before", "drop-after", "drop-into"));
+      const move = (ev) => {
+        if (!ghost) {
+          if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
+          ghost = btn.cloneNode(true);
+          ghost.classList.add("ghost");
+          ghost.removeAttribute("data-sk");
+          document.body.appendChild(ghost);
+          btn.classList.add("dragging");
+          document.body.classList.add("rail-dragging");
+          closeFly();
+          lockNative("drag", true);
+        }
+        ghost.style.left = (ev.clientX - 20) + "px";
+        ghost.style.top = (ev.clientY - 20) + "px";
+        clear(); over = null; mode = null;
+        for (const it of items()) {
+          if (it === btn) continue;
+          const r = it.getBoundingClientRect();
+          if (ev.clientY < r.top - 3 || ev.clientY > r.bottom + 3) continue;
+          const rel = (ev.clientY - r.top) / r.height;
+          mode = btn.dataset.fk !== "1" && rel > 0.3 && rel < 0.7 ? "into" : rel < 0.5 ? "before" : "after";
+          over = it;
+          break;
+        }
+        if (over) over.classList.add("drop-" + mode);
+      };
+      const up = () => {
+        window.removeEventListener("mousemove", move, true);
+        window.removeEventListener("mouseup", up, true);
+        window.removeEventListener("blur", up);
+        if (!ghost) return;
+        lockNative("drag", false);
+        ghost.remove();
+        btn.classList.remove("dragging");
+        document.body.classList.remove("rail-dragging");
+        clear();
+        dragJustEnded = true;
+        setTimeout(() => { dragJustEnded = false; }, 80);
+        if (over) applyDrop(key, over.dataset.sk, mode);
+      };
+      window.addEventListener("mousemove", move, true);
+      window.addEventListener("mouseup", up, true);
+      window.addEventListener("blur", up);
+    });
   }
 
   async function togglePanel(p) {
@@ -959,6 +1171,38 @@
         g.appendChild(b);
       }
       body.appendChild(g);
+      grp("Couleur du navigateur");
+      hint("Teinte le fond, la barre latérale et les menus. Le mode Noir ou Blanc reste appliqué par-dessus.");
+      const tr = document.createElement("div");
+      tr.className = "tintrow";
+      const curT = TX.getTint();
+      for (const t of TX.TINTS) {
+        const b = document.createElement("button");
+        b.className = "swc" + (t.color ? "" : " none") + (t.id === curT ? " sel" : "");
+        b.title = t.name;
+        if (t.color) b.style.background = t.color;
+        b.onclick = () => { store.set("tint", t.id); applyTheme(); renderSettings(); };
+        tr.appendChild(b);
+      }
+      const cw = document.createElement("label");
+      cw.className = "swc custom" + (curT === "custom" ? " sel" : "");
+      cw.title = "Couleur personnalisée";
+      cw.innerHTML = '<input type="color">';
+      const ci = cw.querySelector("input");
+      ci.value = TX.getCustomTint();
+      ci.oninput = () => { store.set("tintCustom", ci.value); store.set("tint", "custom"); applyTheme(); };
+      ci.onchange = () => renderSettings();
+      tr.appendChild(cw);
+      body.appendChild(tr);
+      grp("Transparence du fond");
+      hint("Effet verre : plus tu montes, plus on voit le bureau flouté à travers la fenêtre (Windows).");
+      const gr = document.createElement("div");
+      gr.className = "stack";
+      gr.innerHTML = '<input class="rng" type="range" min="0" max="100" step="1"><div class="rnglab"><span>Opaque</span><span>Transparent</span></div>';
+      const gi = gr.querySelector("input");
+      gi.value = TX.getGlass();
+      gi.oninput = () => { store.set("glass", Number(gi.value)); applyTheme(); };
+      body.appendChild(gr);
       grp("Couleur d’accent");
       const sw = document.createElement("div");
       sw.className = "swatches";
@@ -1069,15 +1313,30 @@
     }
 
     if (settings.section === "sidebar") {
-      hint("Les sites de la barre latérale s’ouvrent à gauche et gardent leur session.");
+      hint("Clique sur un site pour l’ouvrir dans un nouvel onglet. Glisse les icônes de la barre latérale pour les réorganiser, ou dépose-en une sur une autre pour créer un dossier.");
       if (!sidebarApps.length) body.insertAdjacentHTML("beforeend", '<div class="empty">Aucun site pour l’instant.</div>');
       for (const a of sidebarApps) {
-        body.appendChild(listItem({ url: a.url, title: a.name }, async () => {
-          sidebarApps = sidebarApps.filter((x) => x.key !== a.key);
-          store.set("sidebarApps", sidebarApps);
-          await invoke("close_web_panel", { key: a.key });
-          renderRail(); renderSettings();
-        }, false));
+        if (a.folder) {
+          const fr = document.createElement("div");
+          fr.className = "form";
+          fr.style.gridTemplateColumns = "1fr auto auto";
+          fr.innerHTML = '<input maxlength="40" placeholder="Nom du dossier"><button>Dissoudre</button><button>Supprimer</button>';
+          const ni = fr.querySelector("input");
+          ni.value = a.name;
+          ni.onchange = () => { a.name = ni.value.trim().slice(0, 40) || "Dossier"; saveSide(); renderRail(); };
+          const [bd, bx] = fr.querySelectorAll("button");
+          bd.onclick = () => { const i = sidebarApps.findIndex((x) => x.key === a.key); if (i >= 0) sidebarApps.splice(i, 1, ...a.items); saveSide(); renderRail(); renderSettings(); };
+          bx.onclick = () => { sidebarApps = sidebarApps.filter((x) => x.key !== a.key); saveSide(); renderRail(); renderSettings(); };
+          body.appendChild(fr);
+          if (!a.items.length) body.insertAdjacentHTML("beforeend", '<p class="hint">Dossier vide.</p>');
+          for (const x of a.items) {
+            const li = listItem({ url: x.url, title: x.name }, () => removeSideApp(x.key), false);
+            li.style.marginLeft = "16px";
+            body.appendChild(li);
+          }
+        } else {
+          body.appendChild(listItem({ url: a.url, title: a.name }, () => removeSideApp(a.key), false));
+        }
       }
       grp("Ajouter un site");
       const f = document.createElement("div");
@@ -1089,12 +1348,18 @@
         if (!name || !url) return;
         if (!/^https?:\/\//.test(url)) url = "https://" + url;
         sidebarApps.push({ key: "c" + Date.now(), name, url });
-        store.set("sidebarApps", sidebarApps);
+        saveSide();
         renderRail(); renderSettings();
       };
       f.querySelector("button").onclick = add;
       f.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
       body.appendChild(f);
+      grp("Dossiers");
+      const nf = document.createElement("div");
+      nf.className = "form";
+      nf.innerHTML = '<button class="btn">Nouveau dossier</button>';
+      nf.querySelector("button").onclick = () => { sidebarApps.push({ key: "f" + Date.now(), name: "Dossier", folder: true, items: [] }); saveSide(); renderRail(); renderSettings(); };
+      body.appendChild(nf);
     }
 
     if (settings.section === "passwords") renderPasswords(body, ++renderSeq);

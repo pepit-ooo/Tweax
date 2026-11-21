@@ -746,18 +746,23 @@ async fn win_drag(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn set_tint(app: AppHandle, dark: bool) -> Result<(), String> {
+async fn set_tint(app: AppHandle, dark: bool, tint: Option<Vec<u8>>) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         use tauri::window::{Color, Effect, EffectsBuilder};
-        let color = if dark { Color(0, 0, 0, 24) } else { Color(255, 255, 255, 150) };
+        let color = match tint.as_deref() {
+            Some([r, g, b, a]) => Color(*r, *g, *b, *a),
+            _ => {
+                if dark { Color(0, 0, 0, 24) } else { Color(255, 255, 255, 150) }
+            }
+        };
         main_window(&app)?
             .set_effects(EffectsBuilder::new().effect(Effect::Acrylic).color(color).build())
             .map_err(|e| e.to_string())?;
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = (app, dark);
+        let _ = (app, dark, tint);
     }
     Ok(())
 }
