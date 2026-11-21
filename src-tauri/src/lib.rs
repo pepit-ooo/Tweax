@@ -565,6 +565,28 @@ async fn set_clear_on_exit(app: AppHandle, enabled: bool) -> Result<(), String> 
 }
 
 #[tauri::command]
+async fn set_hw_accel(app: AppHandle, enabled: bool) -> Result<(), String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let marker = dir.join("no_hw_accel");
+    if enabled {
+        if marker.exists() {
+            std::fs::remove_file(marker).map_err(|e| e.to_string())
+        } else {
+            Ok(())
+        }
+    } else {
+        std::fs::write(marker, b"1").map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_hw_accel(app: AppHandle) -> Result<bool, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(!dir.join("no_hw_accel").exists())
+}
+
+#[tauri::command]
 async fn reader_mode(app: AppHandle, id: u32) -> Result<(), String> {
     tab(&app, id)?
         .eval("window.__tweaxReader && window.__tweaxReader.toggle()")
@@ -996,6 +1018,17 @@ pub fn run() {
 
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
+            #[cfg(target_os = "windows")]
+            {
+                if dir.join("no_hw_accel").exists() {
+                    let extra = "--disable-gpu --disable-gpu-compositing";
+                    let args = match std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS") {
+                        Ok(cur) if !cur.trim().is_empty() => format!("{cur} {extra}"),
+                        _ => extra.to_string(),
+                    };
+                    std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", args);
+                }
+            }
             if dir.join("clear_on_exit").exists() {
                 CLEAR_ON_EXIT.store(true, Ordering::SeqCst);
                 if let Some(root) = browsing_root(app.handle()) {
@@ -1054,6 +1087,8 @@ pub fn run() {
             save_text_file,
             clear_browsing_data,
             set_clear_on_exit,
+            set_hw_accel,
+            get_hw_accel,
             reader_mode,
             set_shortcuts,
             find_in_page,

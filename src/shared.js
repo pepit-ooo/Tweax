@@ -130,6 +130,7 @@
     newTab: (v) => ["home", "blank", "url"].includes(v),
     newTabUrl: isStr,
     clearOnExit: isBool,
+    hwAccel: isBool,
     dlAsk: isBool,
     bookmarks: (v) => isArr(v) && v.length <= 5000 && v.every((b) => isObj(b) && isStr(b.url)),
     history: (v) => isArr(v) && v.length <= 20000 && v.every((b) => isObj(b) && isStr(b.url)),

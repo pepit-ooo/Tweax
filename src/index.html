@@ -1150,6 +1150,29 @@
       bh.disabled = !history.length;
       bh.onclick = () => { history = []; store.set("history", history); renderSettings(); };
       body.appendChild(cb);
+
+      grp("Performances");
+      const hw = document.createElement("div");
+      hw.className = "stack";
+      hw.appendChild(toggleRow("Accélération matérielle", "Désactive-la si tu as des bugs d’affichage ou des plantages. Redémarrage nécessaire.", store.get("hwAccel", true), async (v) => {
+        store.set("hwAccel", v);
+        await invoke("set_hw_accel", { enabled: v }).catch(() => {});
+        settings.hwMsg = "Redémarre Tweax pour appliquer le changement.";
+        renderSettings();
+      }));
+      body.appendChild(hw);
+      if (settings.hwMsg) {
+        const hp = document.createElement("div");
+        hp.className = "form";
+        hp.innerHTML = '<button class="btn"></button>';
+        hp.querySelector("button").textContent = "Redémarrer maintenant";
+        hp.querySelector("button").onclick = () => { window.__TAURI__.process.relaunch().catch(() => {}); };
+        body.appendChild(hp);
+        const hm = document.createElement("p");
+        hm.className = "hint";
+        hm.textContent = settings.hwMsg;
+        body.appendChild(hm);
+      }
     }
 
     if (settings.section === "home") {
@@ -1802,6 +1825,7 @@
       adblockSync(),
       syncDownloads(),
       invoke("set_clear_on_exit", { enabled: store.get("clearOnExit", false) }).catch(() => {}),
+      invoke("set_hw_accel", { enabled: store.get("hwAccel", true) }).catch(() => {}),
       syncShortcuts(),
     ]);
     const sess = store.get("session", null);

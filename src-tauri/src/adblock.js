@@ -53,21 +53,95 @@
   document.addEventListener("DOMContentLoaded", sync);
 
   if (/(^|\.)youtube(-nocookie)?\.com$/i.test(location.hostname)) {
+    const AD_KEYS = ["adPlacements", "playerAds", "adSlots", "adBreakHeartbeatParams"];
+    const prune = (o) => {
+      if (!o || typeof o !== "object") return o;
+      for (const k of AD_KEYS) if (k in o) { try { delete o[k]; } catch (_) {} }
+      const pr = o.playerResponse;
+      if (pr && typeof pr === "object") for (const k of AD_KEYS) if (k in pr) { try { delete pr[k]; } catch (_) {} }
+      return o;
+    };
+
+    try {
+      const parse = JSON.parse;
+      JSON.parse = function () {
+        const r = parse.apply(this, arguments);
+        try { if (!allowed()) prune(r); } catch (_) {}
+        return r;
+      };
+    } catch (_) {}
+
+    try {
+      const rjson = Response.prototype.json;
+      Response.prototype.json = function () {
+        const url = this.url || "";
+        return rjson.call(this).then((d) => {
+          try { if (/\/youtubei\/v1\/(player|next|browse|reel)/.test(url) && !allowed()) prune(d); } catch (_) {}
+          return d;
+        });
+      };
+    } catch (_) {}
+
+    try {
+      let initial;
+      Object.defineProperty(window, "ytInitialPlayerResponse", {
+        configurable: true,
+        get() { return initial; },
+        set(v) { try { if (!allowed()) prune(v); } catch (_) {} initial = v; },
+      });
+    } catch (_) {}
+
     const SKIP = ".ytp-ad-skip-button,.ytp-ad-skip-button-modern,button.ytp-skip-ad-button,.ytp-ad-skip-button-container button";
-    let queued = false;
+    const EXTRA_CSS = "ytd-rich-item-renderer:has(ytd-ad-slot-renderer),ytd-enforcement-message-view-model,tp-yt-iron-overlay-backdrop.opened{display:none!important}";
+    try {
+      const extra = new CSSStyleSheet();
+      extra.replaceSync(EXTRA_CSS);
+      const addExtra = () => {
+        if (allowed()) document.adoptedStyleSheets = document.adoptedStyleSheets.filter((x) => x !== extra);
+        else if (!document.adoptedStyleSheets.includes(extra)) document.adoptedStyleSheets = [...document.adoptedStyleSheets, extra];
+      };
+      const prevSync = window.__tweaxAdSync;
+      window.__tweaxAdSync = () => { prevSync(); addExtra(); };
+      addExtra();
+    } catch (_) {}
+
+    let saved = null;
     const run = () => {
       queued = false;
       if (allowed()) return;
+      const player = document.querySelector(".html5-video-player");
+      const video = document.querySelector("video.html5-main-video") || (player && player.querySelector("video"));
+      const ad = !!(player && player.classList.contains("ad-showing"));
+      if (ad && video) {
+        if (!saved) saved = { rate: video.playbackRate, muted: video.muted };
+        try {
+          video.muted = true;
+          video.playbackRate = 16;
+          if (isFinite(video.duration) && video.duration > 0 && video.currentTime < video.duration - 0.1) video.currentTime = video.duration;
+        } catch (_) {}
+      } else if (saved && video) {
+        try { video.playbackRate = saved.rate || 1; video.muted = saved.muted; } catch (_) {}
+        saved = null;
+      }
       const b = document.querySelector(SKIP);
       if (b && b.getClientRects().length) { try { b.click(); } catch (_) {} }
+      const warn = document.querySelector("ytd-enforcement-message-view-model");
+      if (warn) {
+        warn.remove();
+        document.querySelectorAll("tp-yt-iron-overlay-backdrop").forEach((e) => e.remove());
+        try { document.body.style.overflow = ""; document.documentElement.style.overflow = ""; } catch (_) {}
+        if (video && video.paused) { try { video.play(); } catch (_) {} }
+      }
     };
+    let queued = false;
     const queue = () => {
       if (queued) return;
       queued = true;
       requestAnimationFrame(run);
     };
-    new MutationObserver(queue).observe(document, { childList: true, subtree: true });
+    new MutationObserver(queue).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
     document.addEventListener("yt-navigate-finish", queue, true);
+    setInterval(queue, 500);
     queue();
   }
 })();
